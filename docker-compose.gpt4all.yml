@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  gpt4all:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpt4all
+    ports:
+      - "5000:5000"
+    environment:
+      - MODEL=mistral-7b-instruct-v0.1.Q4_0.gguf
+    volumes:
+      - gpt4all-models:/root/.cache/gpt4all
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  gpt4all-models:

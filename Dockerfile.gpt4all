@@ -1,0 +1,9 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir gpt4all
+
+EXPOSE 5000
+
+CMD ["python", "-m", "gpt4all.http_server", "--port", "5000"]
