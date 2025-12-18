@@ -136,7 +136,7 @@ export default function UnifiedLoginPage() {
               </CardTitle>
               <CardDescription>
                 {mode === 'paciente'
-                  ? 'Entre com seu CPF ou email para acessar seus documentos'
+                  ? 'Use seu nome completo (ou o email gerado) e a data de nascimento sem separadores (AAAAMMDD).'
                   : 'Acesse o sistema de gestão médica'}
               </CardDescription>
             </CardHeader>
@@ -145,14 +145,14 @@ export default function UnifiedLoginPage() {
                 <div className="flex flex-col gap-6">
                   <div className="grid gap-2">
                     <Label htmlFor="identifier">
-                      {mode === 'paciente' ? 'CPF ou Email' : 'Email'}
+                      {mode === 'paciente' ? 'Nome completo ou Email' : 'Email'}
                     </Label>
                     <Input
                       id="identifier"
                       type="text"
                       placeholder={
                         mode === 'paciente'
-                          ? '000.000.000-00 ou email@exemplo.com'
+                          ? 'Nome completo ou email@patients.local'
                           : 'seu@email.com'
                       }
                       required

@@ -53,17 +53,46 @@ export function extractPatientData(text: string): ParsedPatient {
 }
 
 function findFirstBirthDate(text: string): string | undefined {
-  const fichaMatch = text.match(fichaDateRegex)
+  const headerSection = extractHeaderSection(text)
+  const headerDate = findBirthDateInLines(headerSection)
+  if (headerDate) return headerDate
+
+  const fichaMatch = headerSection.match(fichaDateRegex)
   if (fichaMatch?.[1]) {
     const normalized = normalizeBirthDate(fichaMatch[1])
     if (normalized) return normalized
   }
 
-  const candidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1])
-  for (const candidate of candidates) {
+  const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1])
+  for (const candidate of allCandidates) {
     const normalized = normalizeBirthDate(candidate)
     if (normalized) return normalized
   }
+  return undefined
+}
+
+function extractHeaderSection(text: string) {
+  const evolutionIndex = text.search(/---\s*Evolu[cç][aã]o/i)
+  if (evolutionIndex !== -1) {
+    return text.slice(0, evolutionIndex)
+  }
+  return text
+}
+
+function findBirthDateInLines(block: string): string | undefined {
+  const lines = block.split("\n").map((l) => l.trim()).filter(Boolean)
+
+  for (const line of lines) {
+    if (!line) continue
+    if (!/nasc/i.test(line)) continue
+
+    const match = line.match(dateRegex)
+    if (match?.[1]) {
+      const normalized = normalizeBirthDate(match[1])
+      if (normalized) return normalized
+    }
+  }
+
   return undefined
 }
 
