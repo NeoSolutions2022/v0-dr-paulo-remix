@@ -5,7 +5,6 @@ export interface ParsedPatient {
   missing: string[]
 }
 
-const cpfRegex = /\b(\d{3}[\.\s-]?\d{3}[\.\s-]?\d{3}[\s-]?\d{2})\b/
 const dateRegex = /\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})\b/
 
 export function normalizeCpf(input?: string): string | undefined {
@@ -63,10 +62,9 @@ function isValidDate(year: string, month: string, day: string) {
 
 export function extractPatientData(text: string, cpfOverride?: string): ParsedPatient {
   const missing: string[] = []
-  const cpfMatch = text.match(cpfRegex)
   const birthMatch = text.match(dateRegex)
 
-  const cpf = normalizeCpf(cpfOverride) || normalizeCpf(cpfMatch?.[1])
+  const cpf = normalizeCpf(cpfOverride)
   const birthDate = normalizeBirthDate(birthMatch?.[1])
   const fullName = extractName(text)
 

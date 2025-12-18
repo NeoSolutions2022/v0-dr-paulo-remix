@@ -28,7 +28,8 @@ export async function POST(request: Request) {
           cleanText,
           logs,
           missing: parsed.missing,
-          error: "Não foi possível extrair todos os identificadores (CPF, data de nascimento ou nome)",
+          error:
+            "Informe um CPF válido manualmente; apenas nome completo e data de nascimento são extraídos do relatório",
         },
         { status: 422 },
       )
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
             password: parsed.birthDate?.replace(/-/g, ""),
             existing: true,
           },
-          message: "Paciente já cadastrado. Credenciais preservadas (CPF + data de nascimento)",
+          message:
+            "Paciente já cadastrado. Login permanece Nome completo + data de nascimento; CPF usado apenas para registro e validação.",
         },
         { status: 200 },
       )

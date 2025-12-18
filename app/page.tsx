@@ -5,6 +5,8 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Download, Upload, FileText, Trash2, Copy, CheckCircle2, AlertCircle, Loader2, Zap, Eye } from "lucide-react"
 import { PdfPreviewModal } from "@/components/pdf-preview-modal"
@@ -19,6 +21,7 @@ interface FileItem {
   error?: string
   credentials?: {
     cpf?: string
+    loginName?: string
     password?: string
     existing?: boolean
   }
@@ -44,6 +47,7 @@ export default function Page() {
   const [previewPdf, setPreviewPdf] = useState<PdfData | null>(null)
   const [editingPdf, setEditingPdf] = useState<PdfData | null>(null)
   const [analyzeLoadingId, setAnalyzeLoadingId] = useState<string | null>(null)
+  const [patientCpf, setPatientCpf] = useState("")
 
   const handleClean = async () => {
     if (!rawText.trim()) {
@@ -79,6 +83,14 @@ export default function Page() {
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const normalizedCpf = patientCpf.replace(/\D/g, "")
+    if (!normalizedCpf) {
+      setError("Informe um CPF válido para cadastrar o paciente antes de enviar os arquivos.")
+      setTimeout(() => setError(""), 3000)
+      event.target.value = ""
+      return
+    }
+
     const uploadedFiles = event.target.files
     if (!uploadedFiles) return
 
@@ -95,18 +107,18 @@ export default function Page() {
       }
 
       setFiles((prev) => [...prev, fileItem])
-      processFile(fileItem.id, text, file.name)
+      processFile(fileItem.id, text, file.name, normalizedCpf)
     }
   }
 
-  const processFile = async (fileId: string, rawText: string, sourceName: string) => {
+  const processFile = async (fileId: string, rawText: string, sourceName: string, cpf: string) => {
     setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "processing" } : f)))
 
     try {
       const response = await fetch("/api/process-and-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText, sourceName }),
+        body: JSON.stringify({ rawText, sourceName, cpf }),
       })
 
       const data = await response.json()
@@ -449,6 +461,25 @@ export default function Page() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 pt-6">
+            <div className="grid gap-2 max-w-md">
+              <Label htmlFor="patient-cpf" className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                CPF do paciente (obrigatório)
+              </Label>
+              <Input
+                id="patient-cpf"
+                inputMode="numeric"
+                maxLength={11}
+                value={patientCpf}
+                onChange={(e) => setPatientCpf(e.target.value.replace(/\D/g, ""))}
+                placeholder="Apenas números"
+                className="max-w-md"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Usamos este CPF apenas para registrar e validar o paciente. Nome e data de nascimento são extraídos do
+                relatório.
+              </p>
+            </div>
+
             <label className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700 p-12 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 group">
               <div className="text-center">
                 <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -535,11 +566,14 @@ export default function Page() {
                             )}
                             {file.status === "idle" && "Aguardando processamento..."}
                           </p>
-                          {file.status === "done" && file.credentials && (
+                            {file.status === "done" && file.credentials && (
                             <div className="mt-2 text-xs text-slate-700 dark:text-slate-300 space-y-1">
                               <div className="font-semibold">Credenciais geradas</div>
                               <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 border border-slate-200 dark:border-slate-700">
-                                <div>CPF: <span className="font-mono">{file.credentials.cpf}</span></div>
+                                {file.credentials.loginName && (
+                                  <div>Login (nome completo): <span className="font-mono">{file.credentials.loginName}</span></div>
+                                )}
+                                <div>CPF (registro): <span className="font-mono">{file.credentials.cpf}</span></div>
                                 <div>Senha inicial: <span className="font-mono">{file.credentials.password}</span></div>
                                 <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
                                   Solicite troca de senha no primeiro acesso.
