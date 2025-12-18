@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
 import { extractPatientData } from "@/lib/parsers/patient"
-import { createPatientAuthWithEmail } from "@/lib/auth-helpers"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 interface ProcessPayload {
@@ -21,6 +20,30 @@ function slugifyName(name: string) {
 
   // Supabase Auth local-part length limit safeguard (<=64 chars)
   return slug.slice(0, 60)
+}
+
+async function getOrCreateAuthUser(
+  supabase: ReturnType<typeof createAdminClient>,
+  email: string,
+  password: string,
+) {
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  })
+
+  if (!createError && created?.user) return created.user
+
+  // User might already exist
+  const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 50, email })
+  if (listError) {
+    throw listError
+  }
+  const existing = listed?.users?.find((u) => u.email === email)
+  if (existing) return existing
+
+  throw createError || new Error("Falha ao criar usuário")
 }
 
 export async function POST(request: Request) {
@@ -81,7 +104,7 @@ export async function POST(request: Request) {
 
     const password = parsed.birthDate!.replace(/-/g, "")
     const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
-    const authUser = await createPatientAuthWithEmail(loginEmail, password)
+    const authUser = await getOrCreateAuthUser(supabase, loginEmail, password)
 
     const { error: patientError } = await supabase.from("patients").insert({
       id: authUser.id,
@@ -92,7 +115,7 @@ export async function POST(request: Request) {
       source_name: sourceName || null,
     })
 
-    if (patientError) {
+    if (patientError && patientError.code !== "23505") {
       throw patientError
     }
 
@@ -116,11 +139,7 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error("[v0] Erro ao processar e registrar paciente:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Falha ao processar e registrar paciente",
-      },
-      { status: 500 },
-    )
+    const message = error instanceof Error ? error.message : "Falha ao processar e registrar paciente"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
