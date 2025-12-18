@@ -4,9 +4,8 @@ export interface ParsedPatient {
   missing: string[]
 }
 
-const dateRegex = /\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{8})\b/
-const fichaDateRegex =
-  /Data\s+de\s+Nascimento[:\s-]+(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{8})/i
+const dateRegex = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/g
+const fichaDateRegex = /Data\s*de\s*Nascimento[^0-9]*(\d{4}[\/-]\d{2}[\/-]\d{2}|\d{2}[\/-]\d{2}[\/-]\d{4}|\d{8})/i
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
@@ -40,9 +39,7 @@ function isValidDate(year: string, month: string, day: string) {
 
 export function extractPatientData(text: string): ParsedPatient {
   const missing: string[] = []
-  const birthMatch = text.match(fichaDateRegex) ?? text.match(dateRegex)
-
-  const birthDate = normalizeBirthDate(birthMatch?.[1])
+  const birthDate = findFirstBirthDate(text)
   const fullName = extractName(text)
 
   if (!birthDate) missing.push("birthDate")
@@ -53,6 +50,21 @@ export function extractPatientData(text: string): ParsedPatient {
     fullName,
     missing,
   }
+}
+
+function findFirstBirthDate(text: string): string | undefined {
+  const fichaMatch = text.match(fichaDateRegex)
+  if (fichaMatch?.[1]) {
+    const normalized = normalizeBirthDate(fichaMatch[1])
+    if (normalized) return normalized
+  }
+
+  const candidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1])
+  for (const candidate of candidates) {
+    const normalized = normalizeBirthDate(candidate)
+    if (normalized) return normalized
+  }
+  return undefined
 }
 
 function extractName(text: string): string | undefined {
