@@ -28,9 +28,15 @@ async function getOrCreateAuthUser(
   password: string,
 ) {
   // Tenta buscar usuário existente antes de criar
-  const { data: existingUser, error: getError } = await supabase.auth.admin.getUserByEmail(email)
-  if (!getError && existingUser?.user) {
-    return existingUser.user
+  const { data: usersData, error: getError } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 1,
+    email,
+  })
+
+  const existingUser = usersData?.users?.[0]
+  if (!getError && existingUser) {
+    return existingUser
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
