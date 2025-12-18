@@ -10,12 +10,17 @@ interface ProcessPayload {
 }
 
 function slugifyName(name: string) {
-  return name
+  const slug = name
     .normalize("NFD")
     .replace(/[^a-zA-Z\s]/g, "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, ".")
+    .replace(/\.+/g, ".")
+    .replace(/^\.|\.$/g, "")
+
+  // Supabase Auth local-part length limit safeguard (<=64 chars)
+  return slug.slice(0, 60)
 }
 
 export async function POST(request: Request) {
