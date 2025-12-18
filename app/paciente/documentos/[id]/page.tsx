@@ -19,7 +19,7 @@ export default async function DocumentoPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/login")
   }
 
   const { data: document } = await supabase

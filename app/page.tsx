@@ -17,6 +17,13 @@ interface FileItem {
   cleanText: string
   status: "idle" | "processing" | "done" | "error"
   error?: string
+  credentials?: {
+    cpf?: string
+    password?: string
+    existing?: boolean
+  }
+  missing?: string[]
+  message?: string
 }
 
 interface PdfData {
@@ -88,27 +95,39 @@ export default function Page() {
       }
 
       setFiles((prev) => [...prev, fileItem])
-      processFile(fileItem.id, text)
+      processFile(fileItem.id, text, file.name)
     }
   }
 
-  const processFile = async (fileId: string, rawText: string) => {
+  const processFile = async (fileId: string, rawText: string, sourceName: string) => {
     setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "processing" } : f)))
 
     try {
-      const response = await fetch("/api/clean", {
+      const response = await fetch("/api/process-and-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
+        body: JSON.stringify({ rawText, sourceName }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Falha ao processar arquivo")
+        throw new Error(data.error || "Falha ao processar e registrar paciente")
       }
 
-      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, cleanText: data.cleanText, status: "done" } : f)))
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileId
+            ? {
+                ...f,
+                cleanText: data.cleanText,
+                status: "done",
+                credentials: data.credentials,
+                message: data.message,
+              }
+            : f,
+        ),
+      )
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Falha ao processar"
       setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "error", error: errorMsg } : f)))
@@ -516,6 +535,23 @@ export default function Page() {
                             )}
                             {file.status === "idle" && "Aguardando processamento..."}
                           </p>
+                          {file.status === "done" && file.credentials && (
+                            <div className="mt-2 text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                              <div className="font-semibold">Credenciais geradas</div>
+                              <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 border border-slate-200 dark:border-slate-700">
+                                <div>CPF: <span className="font-mono">{file.credentials.cpf}</span></div>
+                                <div>Senha inicial: <span className="font-mono">{file.credentials.password}</span></div>
+                                <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                                  Solicite troca de senha no primeiro acesso.
+                                </div>
+                                {file.message && (
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                                    {file.message}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-1 ml-2 flex-wrap">
