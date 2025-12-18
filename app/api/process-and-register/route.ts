@@ -7,19 +7,20 @@ import { createAdminClient } from "@/lib/supabase/admin"
 interface ProcessPayload {
   rawText: string
   sourceName?: string
+  cpf?: string
 }
 
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
-    const { rawText, sourceName } = body
+    const { rawText, sourceName, cpf } = body
 
     if (!rawText || typeof rawText !== "string") {
       return NextResponse.json({ error: "rawText é obrigatório e deve ser uma string" }, { status: 400 })
     }
 
     const { cleanText, logs } = cleanMedicalText(rawText)
-    const parsed = extractPatientData(cleanText)
+    const parsed = extractPatientData(cleanText, cpf)
 
     if (parsed.missing.length > 0) {
       return NextResponse.json(
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
           patient: existingPatient,
           credentials: {
             cpf: parsed.cpf,
+            loginName: parsed.fullName,
             password: parsed.birthDate?.replace(/-/g, ""),
             existing: true,
           },
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
         },
         credentials: {
           cpf: parsed.cpf,
+          loginName: parsed.fullName,
           password,
           existing: false,
         },

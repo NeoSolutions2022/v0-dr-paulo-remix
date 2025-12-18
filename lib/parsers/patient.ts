@@ -61,12 +61,12 @@ function isValidDate(year: string, month: string, day: string) {
   )
 }
 
-export function extractPatientData(text: string): ParsedPatient {
+export function extractPatientData(text: string, cpfOverride?: string): ParsedPatient {
   const missing: string[] = []
   const cpfMatch = text.match(cpfRegex)
   const birthMatch = text.match(dateRegex)
 
-  const cpf = normalizeCpf(cpfMatch?.[1])
+  const cpf = normalizeCpf(cpfOverride) || normalizeCpf(cpfMatch?.[1])
   const birthDate = normalizeBirthDate(birthMatch?.[1])
   const fullName = extractName(text)
 
