@@ -1,6 +1,5 @@
 node_modules
 .next
-pnpm-lock.yaml
 npm-debug.log*
 yarn-error.log*
 .pnpm-store
