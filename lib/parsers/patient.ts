@@ -4,7 +4,10 @@ export interface ParsedPatient {
   missing: string[]
 }
 
-const dateRegex = /\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})\b/
+const dateRegex = /\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{8})\b/
+const fichaDateRegex =
+  /Data\s+de\s+Nascimento[:\s-]+(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}-\d{2}-\d{2}|\d{8})/i
+const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
@@ -37,7 +40,7 @@ function isValidDate(year: string, month: string, day: string) {
 
 export function extractPatientData(text: string): ParsedPatient {
   const missing: string[] = []
-  const birthMatch = text.match(dateRegex)
+  const birthMatch = text.match(fichaDateRegex) ?? text.match(dateRegex)
 
   const birthDate = normalizeBirthDate(birthMatch?.[1])
   const fullName = extractName(text)
@@ -53,15 +56,23 @@ export function extractPatientData(text: string): ParsedPatient {
 }
 
 function extractName(text: string): string | undefined {
-  const lineMatch = text.match(/(?:^|\n)Nome[:\s-]+([^\n]+)/i)
-  if (lineMatch?.[1]) {
-    return lineMatch[1].trim()
+  const fichaMatch = text.match(fichaNameRegex)
+  if (fichaMatch?.[1]) {
+    return fichaMatch[1].trim()
   }
 
-  const firstLine = text.split("\n").map((l) => l.trim()).find((l) => l.length > 5)
-  if (!firstLine) return undefined
+  const candidateLine = text
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 5 && !l.startsWith("Código"))
 
-  const words = firstLine.split(" ").filter((w) => w.length > 2)
+  if (!candidateLine) return undefined
+
+  const words = candidateLine
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, " ")
+    .split(" ")
+    .filter((w) => w.length > 2)
+
   if (words.length < 2) return undefined
   return words.join(" ")
 }
