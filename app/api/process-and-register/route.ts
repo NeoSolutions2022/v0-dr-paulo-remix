@@ -42,7 +42,13 @@ export async function POST(request: Request) {
       )
     }
 
-    const supabase = createAdminClient()
+    let supabase
+    try {
+      supabase = createAdminClient()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao inicializar cliente admin"
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
 
     const { data: existingPatient } = await supabase
       .from("patients")
