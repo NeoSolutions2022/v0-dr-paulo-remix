@@ -10,6 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileText, Building2, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 
+const slugifyName = (name: string) =>
+  name
+    .normalize('NFD')
+    .replace(/[^a-zA-Z\\s]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\\s+/g, '.')
+
 type LoginMode = 'paciente' | 'clinica'
 
 export default function UnifiedLoginPage() {
@@ -33,15 +41,15 @@ export default function UnifiedLoginPage() {
       let emailToUse: string
 
       if (mode === 'paciente') {
-        // Login de paciente
+        // Login de paciente com Nome Completo como identificador
         if (isEmail(identifier)) {
           emailToUse = identifier.trim()
         } else {
-          const cpfOnly = formatCpf(identifier)
-          if (cpfOnly.length !== 11) {
-            throw new Error('CPF deve conter 11 dígitos')
+          const nameSlug = slugifyName(identifier)
+          if (!nameSlug) {
+            throw new Error('Informe o nome completo')
           }
-          emailToUse = `${cpfOnly}@patients.local`
+          emailToUse = `${nameSlug}@patients.local`
         }
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({

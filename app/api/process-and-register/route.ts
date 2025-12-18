@@ -1,26 +1,34 @@
 import { NextResponse } from "next/server"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
 import { extractPatientData } from "@/lib/parsers/patient"
-import { createPatientAuth } from "@/lib/auth-helpers"
+import { createPatientAuthWithEmail } from "@/lib/auth-helpers"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 interface ProcessPayload {
   rawText: string
   sourceName?: string
-  cpf?: string
+}
+
+function slugifyName(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[^a-zA-Z\s]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ".")
 }
 
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
-    const { rawText, sourceName, cpf } = body
+    const { rawText, sourceName } = body
 
     if (!rawText || typeof rawText !== "string") {
       return NextResponse.json({ error: "rawText é obrigatório e deve ser uma string" }, { status: 400 })
     }
 
     const { cleanText, logs } = cleanMedicalText(rawText)
-    const parsed = extractPatientData(cleanText, cpf)
+    const parsed = extractPatientData(cleanText)
 
     if (parsed.missing.length > 0) {
       return NextResponse.json(
@@ -28,8 +36,7 @@ export async function POST(request: Request) {
           cleanText,
           logs,
           missing: parsed.missing,
-          error:
-            "Informe um CPF válido manualmente; apenas nome completo e data de nascimento são extraídos do relatório",
+          error: "Não foi possível extrair nome completo e data de nascimento do relatório",
         },
         { status: 422 },
       )
@@ -40,7 +47,8 @@ export async function POST(request: Request) {
     const { data: existingPatient } = await supabase
       .from("patients")
       .select("id, full_name, cpf, birth_date")
-      .eq("cpf", parsed.cpf)
+      .eq("full_name", parsed.fullName)
+      .eq("birth_date", parsed.birthDate)
       .maybeSingle()
 
     if (existingPatient) {
@@ -50,25 +58,24 @@ export async function POST(request: Request) {
           logs,
           patient: existingPatient,
           credentials: {
-            cpf: parsed.cpf,
             loginName: parsed.fullName,
             password: parsed.birthDate?.replace(/-/g, ""),
             existing: true,
           },
-          message:
-            "Paciente já cadastrado. Login permanece Nome completo + data de nascimento; CPF usado apenas para registro e validação.",
+          message: "Paciente já cadastrado. Login permanece Nome completo + data de nascimento.",
         },
         { status: 200 },
       )
     }
 
     const password = parsed.birthDate!.replace(/-/g, "")
-    const authUser = await createPatientAuth(parsed.cpf!, password)
+    const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
+    const authUser = await createPatientAuthWithEmail(loginEmail, password)
 
     const { error: patientError } = await supabase.from("patients").insert({
       id: authUser.id,
       full_name: parsed.fullName,
-      cpf: parsed.cpf,
+      cpf: null,
       birth_date: parsed.birthDate,
       first_access: true,
       source_name: sourceName || null,
@@ -85,11 +92,10 @@ export async function POST(request: Request) {
         patient: {
           id: authUser.id,
           full_name: parsed.fullName,
-          cpf: parsed.cpf,
+          cpf: null,
           birth_date: parsed.birthDate,
         },
         credentials: {
-          cpf: parsed.cpf,
           loginName: parsed.fullName,
           password,
           existing: false,
