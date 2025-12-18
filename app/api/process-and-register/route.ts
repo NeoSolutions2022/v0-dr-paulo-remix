@@ -27,6 +27,12 @@ async function getOrCreateAuthUser(
   email: string,
   password: string,
 ) {
+  // Tenta buscar usuário existente antes de criar
+  const { data: existingUser, error: getError } = await supabase.auth.admin.getUserByEmail(email)
+  if (!getError && existingUser?.user) {
+    return existingUser.user
+  }
+
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -35,15 +41,7 @@ async function getOrCreateAuthUser(
 
   if (!createError && created?.user) return created.user
 
-  // User might already exist
-  const { data: listed, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 50, email })
-  if (listError) {
-    throw listError
-  }
-  const existing = listed?.users?.find((u) => u.email === email)
-  if (existing) return existing
-
-  throw createError || new Error("Falha ao criar usuário")
+  throw createError || getError || new Error("Falha ao criar usuário")
 }
 
 export async function POST(request: Request) {
@@ -78,12 +76,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: message }, { status: 500 })
     }
 
-    const { data: existingPatient } = await supabase
+    const { data: existingPatient, error: existingPatientError } = await supabase
       .from("patients")
       .select("id, full_name, cpf, birth_date")
       .eq("full_name", parsed.fullName)
       .eq("birth_date", parsed.birthDate)
       .maybeSingle()
+    if (existingPatientError) {
+      return NextResponse.json(
+        { error: `Erro ao verificar paciente existente: ${existingPatientError.message}` },
+        { status: 500 },
+      )
+    }
 
     if (existingPatient) {
       return NextResponse.json(
@@ -140,6 +144,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[v0] Erro ao processar e registrar paciente:", error)
     const message = error instanceof Error ? error.message : "Falha ao processar e registrar paciente"
+    // Retorna detalhes mínimos para diagnóstico pelo usuário
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
