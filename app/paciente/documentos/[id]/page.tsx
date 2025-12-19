@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic"
 export default async function DocumentoPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
-  const { id } = await params
+  const { id } = params
   const supabase = await createClient()
   const admin = createAdminClient()
 
@@ -30,7 +30,7 @@ export default async function DocumentoPage({
 
   const { data: document, error: documentError } = await admin
     .from("documents")
-    .select("id, patient_id, file_name, created_at, pdf_url, txt_url, zip_url, clean_text, hash_sha256")
+    .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256")
     .eq("id", id)
     .eq("patient_id", user.id)
     .maybeSingle()
@@ -88,15 +88,12 @@ export default async function DocumentoPage({
               pdfUrl={document.pdf_url}
               documentId={id}
               fileName={document.file_name}
-              txtUrl={document.txt_url}
-              zipUrl={document.zip_url}
             />
           ) : (
             <ProcessedDocumentViewer
               cleanText={document.clean_text}
               fileName={document.file_name}
               documentId={id}
-              txtUrl={document.txt_url}
               patientName={patient?.full_name}
             />
           )}
