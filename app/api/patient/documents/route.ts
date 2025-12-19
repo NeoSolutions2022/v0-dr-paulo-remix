@@ -22,9 +22,7 @@ export async function GET(request: NextRequest) {
 
   const query = admin
     .from("documents")
-    .select(
-      "id, patient_id, file_name, created_at, pdf_url, txt_url, zip_url, clean_text, hash_sha256",
-    )
+    .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256")
     .eq("patient_id", user.id)
 
   const { data, error } = documentId
