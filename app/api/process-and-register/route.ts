@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import crypto from "crypto"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
 import { extractPatientData } from "@/lib/parsers/patient"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -142,7 +143,17 @@ export async function POST(request: Request) {
       )
     }
 
+    let patientRecord = {
+      id: authUser.id,
+      full_name: parsed.fullName!,
+      cpf: null as string | null,
+      birth_date: parsed.birthDate!,
+    }
+    let patientExists = false
+
     if (existingPatient) {
+      patientExists = true
+
       // Garante que o usuário do Auth está alinhado e com senha atualizada
       if (existingPatient.id !== authUser.id) {
         // Realinha o ID do paciente ao usuário de auth encontrado/criado
@@ -172,50 +183,57 @@ export async function POST(request: Request) {
         }
       }
 
-      return NextResponse.json(
-        {
-          cleanText,
-          logs,
-          patient: { ...existingPatient, id: authUser.id },
-          credentials: {
-            loginName: parsed.fullName,
-            password,
-            existing: true,
-          },
-          message: "Paciente já cadastrado. Login permanece Nome completo + data de nascimento.",
-        },
-        { status: 200 },
-      )
+      patientRecord = { ...existingPatient, id: authUser.id }
+    } else {
+      const { error: patientError } = await supabase.from("patients").insert({
+        id: authUser.id,
+        full_name: parsed.fullName,
+        cpf: null,
+        birth_date: parsed.birthDate,
+        first_access: true,
+        source_name: sourceName || null,
+      })
+
+      if (patientError && patientError.code !== "23505") {
+        throw patientError
+      }
     }
 
-    const { error: patientError } = await supabase.from("patients").insert({
-      id: authUser.id,
-      full_name: parsed.fullName,
-      cpf: null,
-      birth_date: parsed.birthDate,
-      first_access: true,
-      source_name: sourceName || null,
-    })
+    const documentName = sourceName || `${patientRecord.full_name || "paciente"}.txt`
+    const hashSha256 = crypto.createHash("sha256").update(cleanText).digest("hex")
 
-    if (patientError && patientError.code !== "23505") {
-      throw patientError
+    const { data: document, error: documentError } = await supabase
+      .from("documents")
+      .insert({
+        patient_id: authUser.id,
+        file_name: documentName,
+        clean_text: cleanText,
+        hash_sha256: hashSha256,
+      })
+      .select("id, patient_id, file_name, clean_text, hash_sha256, pdf_url")
+      .single()
+
+    if (documentError) {
+      return NextResponse.json(
+        { error: `Falha ao registrar relatório processado: ${documentError.message}` },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json(
       {
         cleanText,
         logs,
-        patient: {
-          id: authUser.id,
-          full_name: parsed.fullName,
-          cpf: null,
-          birth_date: parsed.birthDate,
-        },
+        patient: patientRecord,
+        document,
         credentials: {
           loginName: parsed.fullName,
           password,
-          existing: false,
+          existing: patientExists,
         },
+        message: patientExists
+          ? "Paciente já cadastrado. Login permanece Nome completo + data de nascimento."
+          : undefined,
       },
       { status: 200 },
     )
