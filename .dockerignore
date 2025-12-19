@@ -1,0 +1,11 @@
+node_modules
+.next
+npm-debug.log*
+yarn-error.log*
+.pnpm-store
+.git
+.gitignore
+Dockerfile
+*.local
+coverage
+tmp

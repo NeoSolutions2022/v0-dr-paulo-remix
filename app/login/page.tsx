@@ -10,6 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileText, Building2, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
 
+const slugifyName = (name: string) =>
+  name
+    .normalize('NFD')
+    .replace(/[^a-zA-Z\\s]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\\s+/g, '.')
+
 type LoginMode = 'paciente' | 'clinica'
 
 export default function UnifiedLoginPage() {
@@ -33,15 +41,15 @@ export default function UnifiedLoginPage() {
       let emailToUse: string
 
       if (mode === 'paciente') {
-        // Login de paciente
+        // Login de paciente com Nome Completo como identificador
         if (isEmail(identifier)) {
           emailToUse = identifier.trim()
         } else {
-          const cpfOnly = formatCpf(identifier)
-          if (cpfOnly.length !== 11) {
-            throw new Error('CPF deve conter 11 dígitos')
+          const nameSlug = slugifyName(identifier)
+          if (!nameSlug) {
+            throw new Error('Informe o nome completo')
           }
-          emailToUse = `${cpfOnly}@patients.local`
+          emailToUse = `${nameSlug}@patients.local`
         }
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
@@ -128,7 +136,7 @@ export default function UnifiedLoginPage() {
               </CardTitle>
               <CardDescription>
                 {mode === 'paciente'
-                  ? 'Entre com seu CPF ou email para acessar seus documentos'
+                  ? 'Use seu nome completo (ou o email gerado) e a data de nascimento sem separadores (AAAAMMDD).'
                   : 'Acesse o sistema de gestão médica'}
               </CardDescription>
             </CardHeader>
@@ -137,14 +145,14 @@ export default function UnifiedLoginPage() {
                 <div className="flex flex-col gap-6">
                   <div className="grid gap-2">
                     <Label htmlFor="identifier">
-                      {mode === 'paciente' ? 'CPF ou Email' : 'Email'}
+                      {mode === 'paciente' ? 'Nome completo ou Email' : 'Email'}
                     </Label>
                     <Input
                       id="identifier"
                       type="text"
                       placeholder={
                         mode === 'paciente'
-                          ? '000.000.000-00 ou email@exemplo.com'
+                          ? 'Nome completo ou email@patients.local'
                           : 'seu@email.com'
                       }
                       required
