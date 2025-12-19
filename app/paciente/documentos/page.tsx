@@ -15,6 +15,7 @@ type PatientDocument = {
   created_at: string
   pdf_url: string | null
   clean_text?: string | null
+  txt_url?: string | null
 }
 
 export default function DocumentListPage() {
