@@ -81,6 +81,12 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           return
         }
 
+        if (documentResp.status === 404) {
+          setError("Documento não encontrado ou não pertence a você")
+          setIsLoading(false)
+          return
+        }
+
         if (!documentResp.ok) {
           throw new Error("Não foi possível carregar o documento")
         }
