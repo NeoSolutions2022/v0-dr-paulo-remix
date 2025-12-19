@@ -1,35 +1,60 @@
-import { redirect } from 'next/navigation';
-import { createClient } from "@/lib/supabase/server";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, Eye, Calendar, AlertCircle } from 'lucide-react';
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+"use client"
 
-export const dynamic = "force-dynamic"
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from "@/lib/supabase/client"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { FileText, Eye, Calendar, AlertCircle, Loader2 } from 'lucide-react'
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export default async function DocumentListPage() {
-  const supabase = await createClient();
+type PatientDocument = {
+  id: string
+  file_name: string
+  created_at: string
+  pdf_url: string | null
+  clean_text?: string | null
+}
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+export default function DocumentListPage() {
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const [documents, setDocuments] = useState<PatientDocument[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  if (error || !user) {
-    redirect("/auth/login");
-  }
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-  const { data: documents, error: documentsError } = await supabase
-    .from("documents")
-    .select("id, file_name, created_at, pdf_url")
-    .eq("patient_id", user.id)
-    .order("created_at", { ascending: false })
+      if (userError || !user) {
+        router.replace('/auth/login')
+        return
+      }
 
-  if (documentsError) {
-    console.error("Erro ao buscar documentos do paciente", documentsError)
-  }
+      const { data, error: documentsError } = await supabase
+        .from('documents')
+        .select('id, file_name, created_at, pdf_url, clean_text')
+        .eq('patient_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (documentsError) {
+        console.error('Erro ao buscar documentos do paciente', documentsError)
+        setError('Não foi possível carregar seus documentos. Tente novamente.')
+      } else {
+        setDocuments(data || [])
+      }
+
+      setIsLoading(false)
+    }
+
+    fetchDocuments()
+  }, [router, supabase])
 
   return (
     <div className="space-y-6">
@@ -59,10 +84,15 @@ export default async function DocumentListPage() {
             </CardHeader>
 
             <CardContent>
-              {documentsError ? (
+              {isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando seus documentos...
+                </div>
+              ) : error ? (
                 <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
                   <AlertCircle className="h-4 w-4" />
-                  Não foi possível carregar seus documentos. Tente novamente.
+                  {error}
                 </div>
               ) : (documents?.length ?? 0) === 0 ? (
                 <div className="text-center py-12">
@@ -89,9 +119,9 @@ export default async function DocumentListPage() {
                               <Calendar className="h-3.5 w-3.5" />
                               {new Date(doc.created_at).toLocaleDateString("pt-BR")}
                             </p>
-                            {doc.pdf_url && (
+                            {(doc.pdf_url || doc.clean_text) && (
                               <Badge variant="outline" className="text-xs">
-                                PDF
+                                {doc.pdf_url ? 'PDF' : 'Processado'}
                               </Badge>
                             )}
                           </div>
