@@ -5,6 +5,7 @@ import { Calendar, File, Shield } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { PdfViewer } from "@/components/pdf-viewer"
+import { PatientCpfGate } from "@/components/patient-cpf-gate"
 
 export default async function DocumentoPage({
   params,
@@ -19,7 +20,7 @@ export default async function DocumentoPage({
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/auth/login")
+    redirect("/login")
   }
 
   const { data: document } = await supabase
@@ -29,9 +30,17 @@ export default async function DocumentoPage({
     .eq("patient_id", user.id)
     .single()
 
+  const { data: patient } = await supabase
+    .from("patients")
+    .select("cpf")
+    .eq("id", user.id)
+    .single()
+
   if (!document) {
     notFound()
   }
+
+  const hasCpf = !!patient?.cpf
 
   return (
     <div className="space-y-6">
@@ -58,7 +67,14 @@ export default async function DocumentoPage({
         </CardHeader>
 
         <CardContent>
-          {document.pdf_url ? (
+          {!hasCpf ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Para baixar ou visualizar o relatório em PDF, informe seu CPF.
+              </p>
+              <PatientCpfGate patientId={user.id} />
+            </div>
+          ) : document.pdf_url ? (
             <PdfViewer 
               pdfUrl={document.pdf_url}
               documentId={id}

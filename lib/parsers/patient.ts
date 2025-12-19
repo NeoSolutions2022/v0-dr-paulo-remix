@@ -1,0 +1,146 @@
+export interface ParsedPatient {
+  birthDate?: string
+  fullName?: string
+  missing: string[]
+}
+
+const dateRegex = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/g
+const fichaDateRegex = /Data\s*de\s*Nascimento[^0-9]*(\d{4}[\/-]\d{2}[\/-]\d{2}|\d{2}[\/-]\d{2}[\/-]\d{4}|\d{8})/i
+const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
+
+export function normalizeBirthDate(raw?: string): string | undefined {
+  if (!raw) return undefined
+  const trimmed = raw.trim()
+
+  // yyyy-mm-dd or yyyy/mm/dd
+  const isoMatch = trimmed.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    if (isValidDate(year, month, day)) return `${year}-${month}-${day}`
+    return undefined
+  }
+
+  // ddmmyyyy (numbers only)
+  if (/^\d{8}$/.test(trimmed)) {
+    const year = trimmed.slice(4, 8)
+    const month = trimmed.slice(2, 4)
+    const day = trimmed.slice(0, 2)
+    if (isValidDate(year, month, day)) return `${year}-${month}-${day}`
+    return undefined
+  }
+
+  // dd/mm/yyyy or dd-mm-yyyy
+  const match = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/)
+  if (!match) return undefined
+
+  const [, day, month, year] = match
+  if (!isValidDate(year, month, day)) return undefined
+  return `${year}-${month}-${day}`
+}
+
+function isValidDate(year: string, month: string, day: string) {
+  const date = new Date(`${year}-${month}-${day}`)
+  return (
+    date.getFullYear() === Number(year) &&
+    date.getMonth() + 1 === Number(month) &&
+    date.getDate() === Number(day)
+  )
+}
+
+export function extractPatientData(text: string): ParsedPatient {
+  const missing: string[] = []
+  const birthDate = findFirstBirthDate(text)
+  const fullName = extractName(text)
+
+  if (!birthDate) missing.push("birthDate")
+  if (!fullName) missing.push("fullName")
+
+  return {
+    birthDate,
+    fullName,
+    missing,
+  }
+}
+
+function findFirstBirthDate(text: string): string | undefined {
+  const headerSection = extractHeaderSection(text)
+  const headerDate = findBirthDateInLines(headerSection)
+  if (headerDate) return headerDate
+
+  const fichaMatch = headerSection.match(fichaDateRegex)
+  if (fichaMatch?.[1]) {
+    const normalized = normalizeBirthDate(fichaMatch[1])
+    if (normalized) return normalized
+  }
+
+  const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1])
+  for (const candidate of allCandidates) {
+    const normalized = normalizeBirthDate(candidate)
+    if (normalized) return normalized
+  }
+  return undefined
+}
+
+function extractHeaderSection(text: string) {
+  const evolutionIndex = text.search(/---\s*Evolu[cç][aã]o/i)
+  if (evolutionIndex !== -1) {
+    return text.slice(0, evolutionIndex)
+  }
+  return text
+}
+
+function findBirthDateInLines(block: string): string | undefined {
+  const lines = block.split("\n").map((l) => l.trim()).filter(Boolean)
+
+  // Prioritize lines explicitly mentioning birth date
+  for (const line of lines) {
+    if (!/nasc/i.test(line)) continue
+
+    const match = line.match(dateRegex)
+    if (match?.[1]) {
+      const normalized = normalizeBirthDate(match[1])
+      if (normalized) return normalized
+    }
+  }
+
+  // Fallback: first valid date in header block
+  for (const line of lines) {
+    const match = line.match(dateRegex)
+    if (match?.[1]) {
+      const normalized = normalizeBirthDate(match[1])
+      if (normalized) return normalized
+    }
+  }
+
+  return undefined
+}
+
+function extractName(text: string): string | undefined {
+  const header = extractHeaderSection(text)
+
+  const fichaMatch = header.match(fichaNameRegex)
+  if (fichaMatch?.[1]) {
+    const cleaned = cleanupName(fichaMatch[1])
+    if (cleaned) return cleaned
+  }
+
+  const candidateLine = header
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => /nome[:\s-]/i.test(l) || (l.length > 5 && !/^=+$/.test(l)))
+
+  if (!candidateLine) return undefined
+
+  const cleaned = cleanupName(candidateLine.replace(/^[Nn]ome[:\s-]+/, ""))
+  return cleaned || undefined
+}
+
+function cleanupName(raw: string): string {
+  return raw
+    .replace(/Data\s+de\s+Nascimento.*$/i, "")
+    .replace(/Dt\.?\s*Nasc.*$/i, "")
+    .replace(/Telefone.*$/i, "")
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
