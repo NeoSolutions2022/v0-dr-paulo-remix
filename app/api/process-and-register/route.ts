@@ -2,10 +2,12 @@ import { NextResponse } from "next/server"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
 import { extractPatientData } from "@/lib/parsers/patient"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 interface ProcessPayload {
   rawText: string
   sourceName?: string
+  debugLogin?: boolean
 }
 
 function slugifyName(name: string) {
@@ -65,7 +67,7 @@ async function getOrCreateAuthUser(
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
-    const { rawText, sourceName } = body
+    const { rawText, sourceName, debugLogin = true } = body
 
     if (!rawText || typeof rawText !== "string") {
       return NextResponse.json({ error: "rawText é obrigatório e deve ser uma string" }, { status: 400 })
@@ -97,6 +99,35 @@ export async function POST(request: Request) {
     const password = parsed.birthDate!.replace(/-/g, "")
     const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
     const authUser = await getOrCreateAuthUser(supabase, loginEmail, password)
+
+    if (debugLogin) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://fhznxprnzdswjzpesgal.supabase.co"
+      const supabaseAnonKey =
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoem54cHJuemRzd2p6cGVzZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzU0NDcsImV4cCI6MjA4MTY1MTQ0N30.ggOs6IBd6yAsJhWsHj9boWkyaqWTi1s11wRMDWZrOQY"
+
+      const publicClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+
+      const { error: debugAuthError } = await publicClient.auth.signInWithPassword({
+        email: loginEmail,
+        password,
+      })
+
+      if (debugAuthError) {
+        return NextResponse.json(
+          {
+            error: "Falha ao autenticar com as credenciais geradas",
+            detail: debugAuthError.message,
+            loginEmail,
+            password,
+            supabaseUrl,
+          },
+          { status: 500 },
+        )
+      }
+    }
 
     const { data: existingPatient, error: existingPatientError } = await supabase
       .from("patients")
