@@ -28,16 +28,7 @@ export default function UnifiedLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const deriveBirthDateFromPassword = (rawPassword: string) => {
-    const match = rawPassword.match(/^(\d{4})(\d{2})(\d{2})$/)
-    if (!match) return null
-
-    const [, year, month, day] = match
-    return `${year}-${month}-${day}`
-  }
-
   const isEmail = (input: string) => input.includes('@')
-  const formatCpf = (cpfRaw: string) => cpfRaw.replace(/\D/g, '')
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,29 +59,6 @@ export default function UnifiedLoginPage() {
         if (signInError) throw signInError
 
         const userId = data.user.id
-        const derivedBirthDate = deriveBirthDateFromPassword(password)
-        const fallbackFullName =
-          data.user.user_metadata?.full_name || identifier.trim() || null
-
-        const { error: upsertError } = await supabase.from('patients').upsert(
-          [
-            {
-              id: userId,
-              full_name: fallbackFullName,
-              birth_date: derivedBirthDate,
-              email: data.user.email,
-              first_access: true,
-            },
-          ],
-          { onConflict: 'id' },
-        )
-
-        if (upsertError) {
-          await supabase.auth.signOut()
-          throw new Error('Falha ao alinhar cadastro do paciente')
-        }
-
-        // Verificar se é paciente
         const { data: patient, error: patientError } = await supabase
           .from('patients')
           .select('*')
@@ -99,7 +67,7 @@ export default function UnifiedLoginPage() {
 
         if (patientError || !patient) {
           await supabase.auth.signOut()
-          throw new Error('Credenciais de paciente inválidas')
+          throw new Error('Não encontramos seu cadastro de paciente')
         }
 
         router.push('/paciente/dashboard')
