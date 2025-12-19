@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { FileText, Eye, Calendar, AlertCircle, Loader2 } from 'lucide-react'
 import Link from "next/link"
@@ -20,41 +19,39 @@ type PatientDocument = {
 
 export default function DocumentListPage() {
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchDocuments = async () => {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+      const response = await fetch('/api/patient/documents', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
 
-      if (userError || !user) {
+      if (response.status === 401) {
         router.replace('/auth/login')
         return
       }
 
-      const { data, error: documentsError } = await supabase
-        .from('documents')
-        .select('id, file_name, created_at, pdf_url, clean_text')
-        .eq('patient_id', user.id)
-        .order('created_at', { ascending: false })
-
-      if (documentsError) {
-        console.error('Erro ao buscar documentos do paciente', documentsError)
+      if (!response.ok) {
         setError('Não foi possível carregar seus documentos. Tente novamente.')
-      } else {
-        setDocuments(data || [])
+        setIsLoading(false)
+        return
       }
+
+      const { documents: fetchedDocuments } = (await response.json()) as {
+        documents: PatientDocument[]
+      }
+
+      setDocuments(fetchedDocuments || [])
 
       setIsLoading(false)
     }
 
     fetchDocuments()
-  }, [router, supabase])
+  }, [router])
 
   return (
     <div className="space-y-6">

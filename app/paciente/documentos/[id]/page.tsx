@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar, Shield } from 'lucide-react'
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ export default async function DocumentoPage({
 }) {
   const { id } = await params
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const {
     data: { user },
@@ -26,12 +28,12 @@ export default async function DocumentoPage({
     redirect("/login")
   }
 
-  const { data: document, error: documentError } = await supabase
+  const { data: document, error: documentError } = await admin
     .from("documents")
     .select("id, patient_id, file_name, created_at, pdf_url, txt_url, zip_url, clean_text, hash_sha256")
     .eq("id", id)
     .eq("patient_id", user.id)
-    .single()
+    .maybeSingle()
 
   if (documentError) {
     console.error("Erro ao buscar documento do paciente", documentError)

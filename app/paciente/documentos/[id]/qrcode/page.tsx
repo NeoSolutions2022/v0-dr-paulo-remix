@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import QRCode from "qrcode"
 import { redirect } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
@@ -13,6 +14,7 @@ export default async function QRDocumentPage({
 }) {
   const { id } = await params
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const {
     data: { user },
@@ -20,12 +22,12 @@ export default async function QRDocumentPage({
 
   if (!user) redirect("/auth/login")
 
-  const { data: doc } = await supabase
+  const { data: doc } = await admin
     .from("documents")
     .select("id, patient_id, file_name, created_at")
     .eq("id", id)
     .eq("patient_id", user.id)
-    .single()
+    .maybeSingle()
 
   if (!doc) {
     return (
