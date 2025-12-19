@@ -40,6 +40,12 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     const loadData = async () => {
+      if (!id || id === "undefined") {
+        setError("Documento não encontrado")
+        setIsLoading(false)
+        return
+      }
+
       try {
         const {
           data: { user },
@@ -56,7 +62,7 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             .select("cpf, full_name")
             .eq("id", user.id)
             .maybeSingle(),
-          fetch(`/api/patient/documents?id=${id}`, {
+          fetch(`/api/patient/documents?id=${encodeURIComponent(id)}`, {
             credentials: "include",
             cache: "no-store",
           }),

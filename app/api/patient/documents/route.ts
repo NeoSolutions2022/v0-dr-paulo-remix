@@ -20,6 +20,13 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const documentId = searchParams.get("id")
 
+  if (documentId === "undefined") {
+    return NextResponse.json(
+      { error: "Documento inválido" },
+      { status: 400 },
+    )
+  }
+
   const query = admin
     .from("documents")
     .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256")
