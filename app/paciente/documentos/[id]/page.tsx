@@ -1,59 +1,132 @@
-import { redirect, notFound } from 'next/navigation'
-import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, Shield } from 'lucide-react'
-import { Button } from "@/components/ui/button"
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { Calendar, Shield, AlertCircle, Loader2 } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { PdfViewer } from "@/components/pdf-viewer"
-import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
+import { PatientCpfGate } from "@/components/patient-cpf-gate"
+import { createClient } from "@/lib/supabase/client"
 
-export const dynamic = "force-dynamic"
+type PatientDocument = {
+  id: string
+  patient_id: string
+  file_name: string
+  created_at: string
+  pdf_url: string | null
+  clean_text?: string | null
+  hash_sha256?: string | null
+}
 
-export default async function DocumentoPage({
-  params,
-}: {
-  params: { id: string }
-}) {
+type PatientInfo = {
+  cpf: string | null
+  full_name: string | null
+}
+
+export default function DocumentoPage({ params }: { params: { id: string } }) {
   const { id } = params
-  const supabase = await createClient()
-  const admin = createAdminClient()
+  const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [document, setDocument] = useState<PatientDocument | null>(null)
+  const [patient, setPatient] = useState<PatientInfo | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  if (!user) {
-    redirect("/login")
-  }
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
 
-  const { data: document, error: documentError } = await admin
-    .from("documents")
-    .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256")
-    .eq("id", id)
-    .eq("patient_id", user.id)
-    .maybeSingle()
+        if (!user) {
+          router.replace("/auth/login")
+          return
+        }
 
-  if (documentError) {
-    console.error("Erro ao buscar documento do paciente", documentError)
-  }
+        const [patientResp, documentResp] = await Promise.all([
+          supabase
+            .from("patients")
+            .select("cpf, full_name")
+            .eq("id", user.id)
+            .maybeSingle(),
+          fetch(`/api/patient/documents?id=${id}`, {
+            credentials: "include",
+            cache: "no-store",
+          }),
+        ])
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select("cpf, full_name")
-    .eq("id", user.id)
-    .single()
+        if (patientResp.error) {
+          console.error("Erro ao carregar paciente", patientResp.error)
+        }
 
-  if (!document) {
-    notFound()
-  }
+        if (patientResp.data) {
+          setPatient(patientResp.data)
+        }
+
+        if (documentResp.status === 401) {
+          router.replace("/auth/login")
+          return
+        }
+
+        if (!documentResp.ok) {
+          throw new Error("Não foi possível carregar o documento")
+        }
+
+        const { documents } = (await documentResp.json()) as {
+          documents: PatientDocument | PatientDocument[]
+        }
+
+        const documentData = Array.isArray(documents)
+          ? documents[0]
+          : documents
+
+        if (!documentData) {
+          setError("Documento não encontrado")
+          return
+        }
+
+        setDocument(documentData)
+      } catch (err: any) {
+        console.error("Erro ao carregar documento do paciente", err)
+        setError(err.message || "Falha ao carregar documento")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [id, router, supabase])
 
   const hasCpf = !!patient?.cpf
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+        <Loader2 className="h-4 w-4 animate-spin" /> Carregando documento...
+      </div>
+    )
+  }
+
+  if (error || !document) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          {error || "Documento não encontrado"}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -64,57 +137,66 @@ export default async function DocumentoPage({
             Enviado em {new Date(document.created_at).toLocaleDateString("pt-BR")}
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/paciente/documentos">Voltar</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {document.pdf_url && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={document.pdf_url} download target="_blank">
+                Download PDF
+              </Link>
+            </Button>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/paciente/documentos">Voltar</Link>
+          </Button>
+        </div>
       </div>
 
-      {/* PDF Viewer */}
       <Card>
         <CardHeader>
           <CardTitle>Visualização do Documento</CardTitle>
         </CardHeader>
 
-        <CardContent>
-          {!hasCpf ? (
-            <div className="space-y-4">
+        <CardContent className="space-y-4">
+          {!hasCpf && (
+            <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/40 rounded-lg border">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                Para baixar ou visualizar o relatório em PDF, informe seu CPF.
+                Para validar o relatório publicamente ou assinar com hash, informe seu CPF.
               </p>
-              <PatientCpfGate patientId={user.id} />
+              <PatientCpfGate patientId={document.patient_id} />
             </div>
-          ) : document.pdf_url ? (
+          )}
+
+          {document.pdf_url ? (
             <PdfViewer
               pdfUrl={document.pdf_url}
-              documentId={id}
+              documentId={document.id}
               fileName={document.file_name}
             />
           ) : (
             <ProcessedDocumentViewer
               cleanText={document.clean_text}
               fileName={document.file_name}
-              documentId={id}
+              documentId={document.id}
               patientName={patient?.full_name}
             />
           )}
 
-          {/* Validation Button */}
           {document.hash_sha256 && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
                   <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   <div>
                     <p className="font-medium text-sm text-blue-900 dark:text-blue-100">
-                      Documento Assinado Digitalmente
+                      Documento assinado digitalmente
                     </p>
                     <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                      Valide a autenticidade através do QR Code ou link público
+                      Valide a autenticidade pelo QR Code ou link público
                     </p>
                   </div>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/validar/${id}`} target="_blank">
+                  <Link href={`/validar/${document.id}`} target="_blank">
                     Validar
                   </Link>
                 </Button>
