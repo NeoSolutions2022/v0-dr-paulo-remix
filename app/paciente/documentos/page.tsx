@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+export const dynamic = "force-dynamic"
+
 export default async function DocumentListPage() {
   const supabase = await createClient();
 
@@ -19,11 +21,15 @@ export default async function DocumentListPage() {
     redirect("/auth/login");
   }
 
-  const { data: documents } = await supabase
+  const { data: documents, error: documentsError } = await supabase
     .from("documents")
-    .select("*")
+    .select("id, file_name, created_at, category")
     .eq("patient_id", user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+
+  if (documentsError) {
+    console.error("Erro ao buscar documentos do paciente", documentsError)
+  }
 
   // Group by category
   const categories = ['Todos', 'Exame', 'Laudo', 'Atestado', 'Receita', 'Relatório'];

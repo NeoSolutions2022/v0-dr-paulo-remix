@@ -8,6 +8,8 @@ import { PdfViewer } from "@/components/pdf-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
 
+export const dynamic = "force-dynamic"
+
 export default async function DocumentoPage({
   params,
 }: {
@@ -24,16 +26,20 @@ export default async function DocumentoPage({
     redirect("/login")
   }
 
-  const { data: document } = await supabase
+  const { data: document, error: documentError } = await supabase
     .from("documents")
-    .select("*")
+    .select("id, patient_id, file_name, created_at, pdf_url, txt_url, zip_url, clean_text, hash_sha256")
     .eq("id", id)
     .eq("patient_id", user.id)
     .single()
 
+  if (documentError) {
+    console.error("Erro ao buscar documento do paciente", documentError)
+  }
+
   const { data: patient } = await supabase
     .from("patients")
-    .select("cpf, name")
+    .select("cpf, full_name")
     .eq("id", user.id)
     .single()
 
@@ -89,7 +95,7 @@ export default async function DocumentoPage({
               fileName={document.file_name}
               documentId={id}
               txtUrl={document.txt_url}
-              patientName={patient?.name}
+              patientName={patient?.full_name}
             />
           )}
 
