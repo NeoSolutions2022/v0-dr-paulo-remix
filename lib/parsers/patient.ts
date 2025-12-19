@@ -12,6 +12,15 @@ export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
   const trimmed = raw.trim()
 
+  // yyyy-mm-dd or yyyy/mm/dd
+  const isoMatch = trimmed.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    if (isValidDate(year, month, day)) return `${year}-${month}-${day}`
+    return undefined
+  }
+
+  // ddmmyyyy (numbers only)
   if (/^\d{8}$/.test(trimmed)) {
     const year = trimmed.slice(4, 8)
     const month = trimmed.slice(2, 4)
@@ -20,6 +29,7 @@ export function normalizeBirthDate(raw?: string): string | undefined {
     return undefined
   }
 
+  // dd/mm/yyyy or dd-mm-yyyy
   const match = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/)
   if (!match) return undefined
 
@@ -82,10 +92,19 @@ function extractHeaderSection(text: string) {
 function findBirthDateInLines(block: string): string | undefined {
   const lines = block.split("\n").map((l) => l.trim()).filter(Boolean)
 
+  // Prioritize lines explicitly mentioning birth date
   for (const line of lines) {
-    if (!line) continue
     if (!/nasc/i.test(line)) continue
 
+    const match = line.match(dateRegex)
+    if (match?.[1]) {
+      const normalized = normalizeBirthDate(match[1])
+      if (normalized) return normalized
+    }
+  }
+
+  // Fallback: first valid date in header block
+  for (const line of lines) {
     const match = line.match(dateRegex)
     if (match?.[1]) {
       const normalized = normalizeBirthDate(match[1])
@@ -97,23 +116,31 @@ function findBirthDateInLines(block: string): string | undefined {
 }
 
 function extractName(text: string): string | undefined {
-  const fichaMatch = text.match(fichaNameRegex)
+  const header = extractHeaderSection(text)
+
+  const fichaMatch = header.match(fichaNameRegex)
   if (fichaMatch?.[1]) {
-    return fichaMatch[1].trim()
+    const cleaned = cleanupName(fichaMatch[1])
+    if (cleaned) return cleaned
   }
 
-  const candidateLine = text
+  const candidateLine = header
     .split("\n")
     .map((l) => l.trim())
-    .find((l) => l.length > 5 && !l.startsWith("Código"))
+    .find((l) => /nome[:\s-]/i.test(l) || (l.length > 5 && !/^=+$/.test(l)))
 
   if (!candidateLine) return undefined
 
-  const words = candidateLine
-    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, " ")
-    .split(" ")
-    .filter((w) => w.length > 2)
+  const cleaned = cleanupName(candidateLine.replace(/^[Nn]ome[:\s-]+/, ""))
+  return cleaned || undefined
+}
 
-  if (words.length < 2) return undefined
-  return words.join(" ")
+function cleanupName(raw: string): string {
+  return raw
+    .replace(/Data\s+de\s+Nascimento.*$/i, "")
+    .replace(/Dt\.?\s*Nasc.*$/i, "")
+    .replace(/Telefone.*$/i, "")
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
