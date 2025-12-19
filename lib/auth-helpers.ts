@@ -15,6 +15,20 @@ export async function createPatientAuth(cpf: string, password: string) {
   return authData.user
 }
 
+export async function createPatientAuthWithEmail(email: string, password: string) {
+  const supabase = createAdminClient()
+
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  })
+
+  if (authError) throw authError
+
+  return authData.user
+}
+
 export async function createClinicUserAuth(email: string, password: string) {
   const supabase = createAdminClient()
 
