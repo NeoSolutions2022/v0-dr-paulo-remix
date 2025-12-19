@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const documentId = searchParams.get("id")
 
   const baseSelect =
-    "id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256"
+    "id, patient_id, file_name, created_at, pdf_url, clean_text, txt_url, hash_sha256"
 
   // Quando um ID específico é informado, buscamos primeiro o documento e
   // validamos se pertence ao usuário autenticado. Assim evitamos `null`

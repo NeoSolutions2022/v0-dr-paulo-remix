@@ -20,6 +20,7 @@ type PatientDocument = {
   created_at: string
   pdf_url: string | null
   clean_text?: string | null
+  txt_url?: string | null
   hash_sha256?: string | null
 }
 
@@ -183,12 +184,14 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
               pdfUrl={document.pdf_url}
               documentId={document.id}
               fileName={document.file_name}
+              txtUrl={document.txt_url || undefined}
             />
           ) : (
             <ProcessedDocumentViewer
               cleanText={document.clean_text}
               fileName={document.file_name}
               documentId={document.id}
+              txtUrl={document.txt_url}
               patientName={patient?.full_name}
             />
           )}
