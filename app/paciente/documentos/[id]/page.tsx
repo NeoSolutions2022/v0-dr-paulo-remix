@@ -1,11 +1,12 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Calendar, File, Shield } from 'lucide-react'
+import { Calendar, Shield } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { PdfViewer } from "@/components/pdf-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
+import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
 
 export default async function DocumentoPage({
   params,
@@ -32,7 +33,7 @@ export default async function DocumentoPage({
 
   const { data: patient } = await supabase
     .from("patients")
-    .select("cpf")
+    .select("cpf, name")
     .eq("id", user.id)
     .single()
 
@@ -75,7 +76,7 @@ export default async function DocumentoPage({
               <PatientCpfGate patientId={user.id} />
             </div>
           ) : document.pdf_url ? (
-            <PdfViewer 
+            <PdfViewer
               pdfUrl={document.pdf_url}
               documentId={id}
               fileName={document.file_name}
@@ -83,24 +84,13 @@ export default async function DocumentoPage({
               zipUrl={document.zip_url}
             />
           ) : (
-            <div className="w-full h-[720px] border rounded-lg flex flex-col items-center justify-center text-slate-500 bg-slate-50 dark:bg-slate-900">
-              <File className="h-16 w-16 opacity-40 mb-4" />
-              <p className="text-lg font-medium">Nenhum PDF disponível</p>
-              <p className="text-sm mt-2">O documento está disponível apenas em formato texto</p>
-              
-              {document.clean_text && (
-                <div className="mt-8 w-full max-w-3xl px-6">
-                  <div className="bg-white dark:bg-slate-800 p-6 rounded-lg border">
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-                      Conteúdo do Documento:
-                    </p>
-                    <pre className="whitespace-pre-wrap text-sm text-slate-900 dark:text-slate-100 font-mono leading-relaxed max-h-96 overflow-y-auto">
-                      {document.clean_text}
-                    </pre>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ProcessedDocumentViewer
+              cleanText={document.clean_text}
+              fileName={document.file_name}
+              documentId={id}
+              txtUrl={document.txt_url}
+              patientName={patient?.name}
+            />
           )}
 
           {/* Validation Button */}

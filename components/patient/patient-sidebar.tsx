@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, FolderOpen, User, LogOut, Calendar, MessageSquare } from 'lucide-react';
+import { FileText, User, LogOut } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 export function PatientSidebar() {
@@ -10,34 +10,14 @@ export function PatientSidebar() {
 
   const menu = [
     {
-      label: "Dashboard",
-      href: "/paciente/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
       label: "Documentos",
       href: "/paciente/documentos",
       icon: FileText,
     },
     {
-      label: "Linha do Tempo",
-      href: "/paciente/timeline",
-      icon: Calendar,
-    },
-    {
-      label: "Arquivos",
-      href: "/paciente/arquivos",
-      icon: FolderOpen,
-    },
-    {
       label: "Perfil",
       href: "/paciente/perfil",
       icon: User,
-    },
-    {
-      label: "Suporte",
-      href: "/paciente/suporte",
-      icon: MessageSquare,
     },
   ];
 

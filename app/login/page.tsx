@@ -13,10 +13,12 @@ import { FileText, Building2, AlertCircle, Loader2, ArrowRight } from 'lucide-re
 const slugifyName = (name: string) =>
   name
     .normalize('NFD')
-    .replace(/[^a-zA-Z\\s]/g, '')
+    .replace(/[^a-zA-Z\s]/g, '')
     .trim()
     .toLowerCase()
-    .replace(/\\s+/g, '.')
+    .replace(/\s+/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '')
 
 type LoginMode = 'paciente' | 'clinica'
 
@@ -116,7 +118,7 @@ export default function UnifiedLoginPage() {
           }
         }
 
-        router.push('/paciente/dashboard')
+        router.push('/paciente/documentos')
       } else {
         // Login de clínica
         emailToUse = identifier.trim()
