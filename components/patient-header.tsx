@@ -90,9 +90,6 @@ export function PatientHeader() {
             <DropdownMenuItem onClick={() => router.push("/paciente/perfil")}>
               Perfil
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/paciente/dashboard")}>
-              Dashboard
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-red-600">
               Sair

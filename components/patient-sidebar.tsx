@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, FileText, User, LogOut } from 'lucide-react';
+import { FileText, User, LogOut } from 'lucide-react';
 import Link from "next/link";
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from "@/lib/utils";
@@ -18,11 +18,6 @@ export function PatientSidebar() {
 
   const navigation = [
     {
-      name: "Dashboard",
-      href: "/paciente/dashboard",
-      icon: Home,
-    },
-    {
       name: "Meus Documentos",
       href: "/paciente/documentos",
       icon: FileText,
@@ -37,7 +32,7 @@ export function PatientSidebar() {
   return (
     <div className="flex h-full w-64 flex-col border-r bg-white dark:bg-slate-900 dark:border-slate-800">
       <div className="flex h-16 items-center border-b px-6 dark:border-slate-800">
-        <Link href="/paciente/dashboard" className="flex items-center gap-2">
+        <Link href="/paciente/documentos" className="flex items-center gap-2">
           <div className="relative w-8 h-8">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg blur-sm opacity-50"></div>
             <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">

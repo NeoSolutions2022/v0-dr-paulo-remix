@@ -62,7 +62,7 @@ export default function Page() {
       if (error) throw error;
 
       console.log("[v0] Login bem-sucedido, redirecionando...");
-      router.push("/paciente/dashboard");
+      router.push("/paciente/documentos");
     } catch (error: unknown) {
       console.error("[v0] Erro no login:", error);
       setError(error instanceof Error ? error.message : "Erro ao fazer login");

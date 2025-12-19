@@ -23,11 +23,11 @@ export default async function WelcomePage() {
     .single();
 
   if (!patient) {
-    redirect("/paciente/dashboard");
+    redirect("/paciente/documentos");
   }
 
   if (!patient.first_access) {
-    redirect("/paciente/dashboard");
+    redirect("/paciente/documentos");
   }
 
   const firstName = (patient.name || "Paciente").split(" ")[0];
@@ -115,7 +115,7 @@ export default async function WelcomePage() {
                 </Button>
               </Link>
 
-              <Link href="/paciente/dashboard" className="flex-1">
+              <Link href="/paciente/documentos" className="flex-1">
                 <Button variant="outline" className="w-full" size="lg">
                   Ir para o meu portal
                 </Button>

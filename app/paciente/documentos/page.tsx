@@ -1,37 +1,57 @@
-import { redirect } from 'next/navigation';
-import { createClient } from "@/lib/supabase/server";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileText, Eye, Calendar, Filter } from 'lucide-react';
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+"use client"
 
-export default async function DocumentListPage() {
-  const supabase = await createClient();
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { FileText, Eye, Calendar, AlertCircle, Loader2 } from 'lucide-react'
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+type PatientDocument = {
+  id: string
+  file_name: string
+  created_at: string
+  pdf_url: string | null
+  clean_text?: string | null
+}
 
-  if (error || !user) {
-    redirect("/auth/login");
-  }
+export default function DocumentListPage() {
+  const router = useRouter()
+  const [documents, setDocuments] = useState<PatientDocument[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("*")
-    .eq("patient_id", user.id)
-    .order("created_at", { ascending: false });
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      const response = await fetch('/api/patient/documents', {
+        credentials: 'include',
+        cache: 'no-store',
+      })
 
-  // Group by category
-  const categories = ['Todos', 'Exame', 'Laudo', 'Atestado', 'Receita', 'Relatório'];
-  
-  const getDocumentsByCategory = (category: string) => {
-    if (category === 'Todos') return documents || [];
-    return documents?.filter(doc => doc.category === category) || [];
-  };
+      if (response.status === 401) {
+        router.replace('/auth/login')
+        return
+      }
+
+      if (!response.ok) {
+        setError('Não foi possível carregar seus documentos. Tente novamente.')
+        setIsLoading(false)
+        return
+      }
+
+      const { documents: fetchedDocuments } = (await response.json()) as {
+        documents: PatientDocument[]
+      }
+
+      setDocuments(fetchedDocuments || [])
+
+      setIsLoading(false)
+    }
+
+    fetchDocuments()
+  }, [router])
 
   return (
     <div className="space-y-6">
@@ -44,77 +64,80 @@ export default async function DocumentListPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="Todos" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          {categories.map((cat) => (
-            <TabsTrigger key={cat} value={cat} className="text-xs">
-              {cat}
-              <Badge variant="secondary" className="ml-1.5 text-xs">
-                {getDocumentsByCategory(cat).length}
-              </Badge>
-            </TabsTrigger>
-          ))}
+      <Tabs defaultValue="todos" className="w-full">
+        <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <TabsTrigger value="todos" className="text-xs">
+            Todos
+            <Badge variant="secondary" className="ml-1.5 text-xs">
+              {documents?.length || 0}
+            </Badge>
+          </TabsTrigger>
         </TabsList>
 
-        {categories.map((category) => (
-          <TabsContent key={category} value={category}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Filter className="h-5 w-5" />
-                  {category === 'Todos' ? 'Todos os Documentos' : category + 's'}
-                </CardTitle>
-              </CardHeader>
+        <TabsContent value="todos">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">Todos os Documentos</CardTitle>
+            </CardHeader>
 
-              <CardContent>
-                {getDocumentsByCategory(category).length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                    <p className="text-slate-600 dark:text-slate-400 mb-4">
-                      Nenhum documento encontrado nesta categoria.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {getDocumentsByCategory(category).map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
-                              {doc.file_name}
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando seus documentos...
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </div>
+              ) : (documents?.length ?? 0) === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-600 dark:text-slate-400 mb-4">
+                    Nenhum documento encontrado.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {documents?.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {doc.file_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              <Calendar className="h-3.5 w-3.5" />
+                              {new Date(doc.created_at).toLocaleDateString("pt-BR")}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                                <Calendar className="h-3.5 w-3.5" />
-                                {new Date(doc.created_at).toLocaleDateString("pt-BR")}
-                              </p>
-                              {doc.category && (
-                                <Badge variant="outline" className="text-xs">
-                                  {doc.category}
-                                </Badge>
-                              )}
-                            </div>
+                            {(doc.pdf_url || doc.clean_text) && (
+                              <Badge variant="outline" className="text-xs">
+                                {doc.pdf_url ? 'PDF' : 'Processado'}
+                              </Badge>
+                            )}
                           </div>
                         </div>
-
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/paciente/documentos/${doc.id}`}>
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </Link>
-                        </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/paciente/documentos/${doc.id}`}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver
+                        </Link>
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );

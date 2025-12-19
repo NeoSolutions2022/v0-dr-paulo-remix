@@ -59,7 +59,7 @@ export default function FirstAccessPage() {
 
       if (dbErr) throw dbErr;
 
-      router.push("/paciente/dashboard");
+      router.push("/paciente/documentos");
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Erro ao atualizar senha.");
@@ -83,7 +83,7 @@ export default function FirstAccessPage() {
 
       if (error) throw error;
 
-      router.push("/paciente/dashboard");
+      router.push("/paciente/documentos");
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Erro ao pular etapa.");
