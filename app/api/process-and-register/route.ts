@@ -27,15 +27,18 @@ async function getOrCreateAuthUser(
   email: string,
   password: string,
 ) {
-  // Tenta buscar usuário existente antes de criar
-  const { data: usersData, error: getError } = await supabase.auth.admin.listUsers({
+  // Supabase-js v2 não expõe getUserByEmail; listamos e filtramos manualmente.
+  const { data: usersData, error: listError } = await supabase.auth.admin.listUsers({
     page: 1,
-    perPage: 1,
-    email,
+    perPage: 1000,
   })
 
-  const existingUser = usersData?.users?.[0]
-  if (!getError && existingUser) {
+  if (listError) {
+    throw listError
+  }
+
+  const existingUser = usersData?.users?.find((user) => user.email?.toLowerCase() === email.toLowerCase())
+  if (existingUser) {
     return existingUser
   }
 
@@ -47,7 +50,7 @@ async function getOrCreateAuthUser(
 
   if (!createError && created?.user) return created.user
 
-  throw createError || getError || new Error("Falha ao criar usuário")
+  throw createError || new Error("Falha ao criar usuário")
 }
 
 export async function POST(request: Request) {
