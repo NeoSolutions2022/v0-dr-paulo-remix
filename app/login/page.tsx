@@ -30,6 +30,40 @@ export default function UnifiedLoginPage() {
 
   const isEmail = (input: string) => input.includes('@')
 
+  const parseBirthDateFromPassword = (pwd: string) => {
+    const onlyDigits = pwd.replace(/\D/g, '')
+    if (onlyDigits.length !== 8) return null
+
+    const year = onlyDigits.slice(0, 4)
+    const month = onlyDigits.slice(4, 6)
+    const day = onlyDigits.slice(6, 8)
+
+    if (Number(month) < 1 || Number(month) > 12) return null
+    if (Number(day) < 1 || Number(day) > 31) return null
+
+    return `${year}-${month}-${day}`
+  }
+
+  const ensurePatientExists = async (payload: {
+    userId: string
+    email: string
+    fullName: string
+    birthDate: string | null
+  }) => {
+    const response = await fetch('/api/patients/ensure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Falha ao sincronizar cadastro do paciente: ${errorText}`)
+    }
+
+    return response.json()
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -59,15 +93,27 @@ export default function UnifiedLoginPage() {
         if (signInError) throw signInError
 
         const userId = data.user.id
-        const { data: patient, error: patientError } = await supabase
+        const { data: patient } = await supabase
           .from('patients')
           .select('*')
           .eq('id', userId)
-          .single()
+          .maybeSingle()
 
-        if (patientError || !patient) {
-          await supabase.auth.signOut()
-          throw new Error('Não encontramos seu cadastro de paciente')
+        if (!patient) {
+          const fullNameFromInput = isEmail(identifier) ? identifier.trim() : identifier.trim().toLowerCase()
+          const birthDate = parseBirthDateFromPassword(password)
+
+          const syncedPatient = await ensurePatientExists({
+            userId,
+            email: emailToUse,
+            fullName: fullNameFromInput || emailToUse,
+            birthDate,
+          })
+
+          if (!syncedPatient) {
+            await supabase.auth.signOut()
+            throw new Error('Não encontramos seu cadastro de paciente')
+          }
         }
 
         router.push('/paciente/dashboard')
