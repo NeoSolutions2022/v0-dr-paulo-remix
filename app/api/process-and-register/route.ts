@@ -94,6 +94,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: message }, { status: 500 })
     }
 
+    const password = parsed.birthDate!.replace(/-/g, "")
+    const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
+    const authUser = await getOrCreateAuthUser(supabase, loginEmail, password)
+
     const { data: existingPatient, error: existingPatientError } = await supabase
       .from("patients")
       .select("id, full_name, cpf, birth_date")
@@ -108,14 +112,43 @@ export async function POST(request: Request) {
     }
 
     if (existingPatient) {
+      // Garante que o usuário do Auth está alinhado e com senha atualizada
+      if (existingPatient.id !== authUser.id) {
+        // Realinha o ID do paciente ao usuário de auth encontrado/criado
+        const { error: updatePatientIdError } = await supabase
+          .from("patients")
+          .update({ id: authUser.id })
+          .eq("id", existingPatient.id)
+
+        if (updatePatientIdError) {
+          return NextResponse.json(
+            { error: `Erro ao alinhar paciente ao usuário de login: ${updatePatientIdError.message}` },
+            { status: 500 },
+          )
+        }
+
+        // Move documentos já existentes para o novo ID do paciente
+        const { error: updateDocsError } = await supabase
+          .from("documents")
+          .update({ patient_id: authUser.id })
+          .eq("patient_id", existingPatient.id)
+
+        if (updateDocsError) {
+          return NextResponse.json(
+            { error: `Paciente realinhado, mas falha ao atualizar documentos: ${updateDocsError.message}` },
+            { status: 500 },
+          )
+        }
+      }
+
       return NextResponse.json(
         {
           cleanText,
           logs,
-          patient: existingPatient,
+          patient: { ...existingPatient, id: authUser.id },
           credentials: {
             loginName: parsed.fullName,
-            password: parsed.birthDate?.replace(/-/g, ""),
+            password,
             existing: true,
           },
           message: "Paciente já cadastrado. Login permanece Nome completo + data de nascimento.",
@@ -123,10 +156,6 @@ export async function POST(request: Request) {
         { status: 200 },
       )
     }
-
-    const password = parsed.birthDate!.replace(/-/g, "")
-    const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
-    const authUser = await getOrCreateAuthUser(supabase, loginEmail, password)
 
     const { error: patientError } = await supabase.from("patients").insert({
       id: authUser.id,
