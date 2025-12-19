@@ -39,7 +39,16 @@ async function getOrCreateAuthUser(
 
   const existingUser = usersData?.users?.find((user) => user.email?.toLowerCase() === email.toLowerCase())
   if (existingUser) {
-    return existingUser
+    const { data: updatedUser, error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
+      password,
+      email_confirm: true,
+    })
+
+    if (updateError) {
+      throw updateError
+    }
+
+    return updatedUser?.user || existingUser
   }
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
