@@ -118,6 +118,26 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   const hasCpf = !!patient?.cpf
 
+  const { validPdfUrl, invalidPdf } = useMemo(() => {
+    if (!document?.pdf_url) return { validPdfUrl: null as string | null, invalidPdf: false }
+    const url = document.pdf_url
+
+    const isPdfDataUrl = url.startsWith("data:application/pdf")
+    const looksLikePdfFile = /\.pdf($|[?#])/i.test(url)
+    const encodedPdfMime = url.includes("application%2Fpdf")
+
+    const isValid = isPdfDataUrl || looksLikePdfFile || encodedPdfMime
+
+    if (!isValid) {
+      console.warn("PDF inválido ou em formato HTML; usando clean_text para renderizar", {
+        documentId: document?.id,
+      })
+      return { validPdfUrl: null, invalidPdf: true }
+    }
+
+    return { validPdfUrl: url, invalidPdf: false }
+  }, [document?.id, document?.pdf_url])
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -150,9 +170,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {document.pdf_url && (
+          {validPdfUrl && (
             <Button asChild variant="outline" size="sm">
-              <Link href={document.pdf_url} download target="_blank">
+              <Link href={validPdfUrl} download target="_blank">
                 Download PDF
               </Link>
             </Button>
@@ -178,9 +198,18 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          {document.pdf_url ? (
+          {invalidPdf && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Não foi possível carregar o PDF salvo. Estamos reprocessando o relatório
+                a partir do texto original.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {validPdfUrl ? (
             <PdfViewer
-              pdfUrl={document.pdf_url}
+              pdfUrl={validPdfUrl}
               documentId={document.id}
               fileName={document.file_name}
             />

@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from 'react';
-import { Button } from "@/components/ui/button";
-import { Download, ZoomIn, ZoomOut, Maximize2, Share2, QrCode } from 'lucide-react';
 import Link from 'next/link';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Download, ZoomIn, ZoomOut, Maximize2, Share2, QrCode, AlertTriangle } from 'lucide-react';
 
 interface PdfViewerProps {
   pdfUrl: string;
@@ -15,6 +16,7 @@ interface PdfViewerProps {
 
 export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfViewerProps) {
   const [zoom, setZoom] = useState(100);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleShare = () => {
     if (navigator.share) {
@@ -28,6 +30,15 @@ export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfV
 
   return (
     <div className="space-y-4">
+      {loadError && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {loadError}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border">
         <div className="flex items-center gap-2">
@@ -98,7 +109,7 @@ export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfV
       </div>
 
       {/* PDF Preview */}
-      <div 
+      <div
         className="w-full border rounded-lg overflow-hidden bg-white dark:bg-slate-900"
         style={{ height: '720px' }}
       >
@@ -106,6 +117,9 @@ export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfV
           src={`${pdfUrl}#zoom=${zoom}`}
           className="w-full h-full"
           title="PDF Preview"
+          onError={() =>
+            setLoadError('Não foi possível carregar o PDF. Tente reprocessar o relatório pelo texto.')
+          }
         />
       </div>
     </div>
