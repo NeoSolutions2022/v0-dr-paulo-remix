@@ -4,6 +4,113 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2, Printer, RefreshCw, FileText } from 'lucide-react'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+
+function sanitizeText(text: string) {
+  return text
+    .replace(/\u0000/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim()
+}
+
+async function buildPdfLocally(text: string, title: string): Promise<Blob> {
+  const pdfDoc = await PDFDocument.create()
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+  const pageWidth = 595
+  const pageHeight = 842
+  const margin = 50
+  const maxWidth = pageWidth - margin * 2
+  const lineHeight = 14
+
+  const createPage = (pageIndex: number) => {
+    const page = pdfDoc.addPage([pageWidth, pageHeight])
+
+    page.drawText(title || 'Documento', {
+      x: margin,
+      y: pageHeight - margin,
+      size: 16,
+      font: boldFont,
+      color: rgb(0.1, 0.3, 0.6),
+    })
+
+    page.drawText(`Página ${pageIndex}`, {
+      x: pageWidth - margin - 80,
+      y: pageHeight - margin - 20,
+      size: 9,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    })
+
+    return { page, y: pageHeight - margin - 40 }
+  }
+
+  const pages: { page: any; y: number }[] = [createPage(1)]
+
+  const drawLine = (content: string) => {
+    const current = pages[pages.length - 1]
+
+    if (current.y < margin + lineHeight * 2) {
+      pages.push(createPage(pages.length + 1))
+    }
+
+    const target = pages[pages.length - 1]
+    target.page.drawText(content, {
+      x: margin,
+      y: target.y,
+      size: 11,
+      font,
+      color: rgb(0, 0, 0),
+    })
+    target.y -= lineHeight
+  }
+
+  const wordsPerLine = (line: string) => {
+    const words = line.split(' ')
+    let buffer = ''
+
+    const flush = () => {
+      if (buffer.trim()) {
+        drawLine(buffer.trim())
+      }
+      buffer = ''
+    }
+
+    for (const word of words) {
+      const candidate = `${buffer}${word} `
+      const width = font.widthOfTextAtSize(candidate, 11)
+      if (width > maxWidth && buffer.trim() !== '') {
+        flush()
+        buffer = `${word} `
+      } else {
+        buffer = candidate
+      }
+    }
+
+    if (buffer.trim()) {
+      flush()
+    }
+  }
+
+  const normalized = sanitizeText(text) || 'Conteúdo indisponível.'
+
+  for (const line of normalized.split('\n')) {
+    if (!line.trim()) {
+      const current = pages[pages.length - 1]
+      if (current.y < margin + lineHeight * 2) {
+        pages.push(createPage(pages.length + 1))
+      }
+      pages[pages.length - 1].y -= lineHeight
+      continue
+    }
+    wordsPerLine(line)
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  return new Blob([pdfBytes], { type: 'application/pdf' })
+}
 
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
@@ -71,30 +178,7 @@ export function ProcessedDocumentViewer({
       setIsGenerating(true)
       setError(null)
 
-      const response = await fetch('/api/patient/documents/preview', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cleanText: textSource,
-          fileName,
-          documentId,
-        }),
-      })
-
-      if (!response.ok) {
-        const { error: serverError } = await response.json().catch(() => ({ error: null }))
-        throw new Error(serverError || 'Não foi possível gerar o PDF do relatório.')
-      }
-
-      const blob = await response.blob()
-
-      if (blob.type !== 'application/pdf') {
-        throw new Error('O arquivo retornado não é um PDF válido.')
-      }
-
+      const blob = await buildPdfLocally(textSource, baseName)
       const url = URL.createObjectURL(blob)
       setPdfUrl(url)
       onPdfReady?.(url)
