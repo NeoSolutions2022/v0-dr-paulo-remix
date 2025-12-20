@@ -2,7 +2,13 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 function sanitizeText(text: string): string {
   if (!text) return ''
-  return text.replace(/\u0000/g, '').replace(/\r\n/g, '\n')
+
+  // Remove caracteres nulos e normaliza quebras de linha para evitar falhas do pdf-lib
+  return text
+    .replace(/\u0000/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim()
 }
 
 function createNewPage(
@@ -133,10 +139,34 @@ export async function generatePdfFromText(
   fileName: string,
 ): Promise<Buffer> {
   const safeText = sanitizeText(text)
+  const baseTitle = fileName.replace(/\.[^/.]+$/, '') || 'Documento'
 
-  if (!safeText.trim()) {
-    throw new Error('Documento inválido')
+  // Sempre tenta gerar um PDF, mesmo que o texto esteja vazio ou algum erro
+  // aconteça durante o processamento. Isso evita respostas 4xx/5xx para o
+  // paciente ao clicar em "Visualizar".
+  try {
+    const content = safeText || 'Conteúdo indisponível.'
+    return await buildTextPdf(content, baseTitle)
+  } catch (error) {
+    // Último recurso: gera um PDF mínimo com a mensagem de erro e o texto
+    // truncado para garantir uma resposta válida ao cliente.
+    try {
+      const fallback = `Não foi possível processar o relatório completo.\n\nResumo:\n${safeText.slice(0, 2000) || 'Sem texto disponível.'}`
+      return await buildTextPdf(fallback, baseTitle)
+    } catch {
+      // Se ainda assim falhar, devolve um PDF mínimo para evitar 5xx
+      const finalDoc = await PDFDocument.create()
+      const font = await finalDoc.embedFont(StandardFonts.Helvetica)
+      const page = finalDoc.addPage([595, 842])
+      page.drawText('Relatório indisponível no momento.', {
+        x: 50,
+        y: 790,
+        size: 12,
+        font,
+        color: rgb(0, 0, 0),
+      })
+      const bytes = await finalDoc.save()
+      return Buffer.from(bytes)
+    }
   }
-
-  return buildTextPdf(safeText, fileName.replace(/\.[^/.]+$/, '') || 'Documento')
 }

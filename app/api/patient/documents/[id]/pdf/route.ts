@@ -42,13 +42,9 @@ export async function GET(
     return NextResponse.json({ error: "Documento não encontrado" }, { status: 404 })
   }
 
-  if (!document.clean_text || !document.clean_text.trim()) {
-    return NextResponse.json({ error: "Documento sem texto processado" }, { status: 404 })
-  }
-
   try {
     const pdfBytes = await generatePdfFromText(
-      document.clean_text,
+      document.clean_text || '',
       document.id,
       document.file_name,
     )
