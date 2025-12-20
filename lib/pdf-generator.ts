@@ -1,7 +1,72 @@
 import { PDFDocument, PDFPage, StandardFonts, rgb } from 'pdf-lib'
 import QRCode from 'qrcode'
 
-export async function generatePdfFromText(
+function sanitizeText(text: string): string {
+  if (!text) return ''
+  return text.replace(/\u0000/g, '').replace(/\r\n/g, '\n')
+}
+
+async function buildPlainPdf(text: string, title: string): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.create()
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const page = pdfDoc.addPage([595, 842])
+  const margin = 50
+  const lineHeight = 14
+  const maxWidth = 595 - margin * 2
+
+  const lines = text.split('\n')
+  let y = 842 - margin
+
+  page.drawText(title || 'Documento', {
+    x: margin,
+    y,
+    size: 16,
+    font,
+    color: rgb(0.1, 0.3, 0.6),
+  })
+
+  y -= 24
+
+  const wrapAndDraw = (line: string) => {
+    const words = line.split(' ')
+    let current = ''
+
+    const flush = () => {
+      page.drawText(current.trim(), {
+        x: margin,
+        y,
+        size: 11,
+        font,
+        color: rgb(0, 0, 0),
+      })
+      y -= lineHeight
+    }
+
+    for (const word of words) {
+      const candidate = `${current}${word} `
+      const width = font.widthOfTextAtSize(candidate, 11)
+      if (width > maxWidth && current.trim() !== '') {
+        flush()
+        current = `${word} `
+      } else {
+        current = candidate
+      }
+    }
+
+    if (current.trim()) {
+      flush()
+    }
+  }
+
+  for (const line of lines) {
+    wrapAndDraw(line)
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  return Buffer.from(pdfBytes)
+}
+
+async function buildRichPdf(
   text: string,
   documentId: string,
   fileName: string,
@@ -16,7 +81,7 @@ export async function generatePdfFromText(
   const maxWidth = pageWidth - margin * 2
   const lineHeight = 14
 
-  const addHeader = (page: any, pageIndex: number) => {
+  const addHeader = (page: PDFPage, pageIndex: number) => {
     page.drawText('DOCUMENTO MÉDICO', {
       x: margin,
       y: pageHeight - margin,
@@ -158,4 +223,23 @@ export async function generatePdfFromText(
 
   const pdfBytes = await pdfDoc.save()
   return Buffer.from(pdfBytes)
+}
+
+export async function generatePdfFromText(
+  text: string,
+  documentId: string,
+  fileName: string,
+): Promise<Buffer> {
+  const safeText = sanitizeText(text)
+
+  if (!safeText.trim()) {
+    throw new Error('Documento inválido')
+  }
+
+  try {
+    return await buildRichPdf(safeText, documentId, fileName)
+  } catch (error) {
+    console.error('Erro no pipeline principal de PDF, aplicando fallback simples', error)
+    return await buildPlainPdf(safeText, fileName)
+  }
 }
