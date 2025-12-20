@@ -57,15 +57,26 @@ export function ProcessedDocumentViewer({
   }, [textSource, txtUrl])
 
   const requestPdfFromServer = async () => {
-    if (!textSource) return
+    if (!textSource) {
+      setError('Documento sem texto processado para gerar PDF.')
+      return
+    }
 
     try {
       setIsGenerating(true)
       setError(null)
 
-      const response = await fetch(`/api/patient/documents/${documentId}/pdf`, {
-        method: 'GET',
+      const response = await fetch('/api/patient/documents/preview', {
+        method: 'POST',
         cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cleanText: textSource,
+          fileName,
+          documentId,
+        }),
       })
 
       if (!response.ok) {
