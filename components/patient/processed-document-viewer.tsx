@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2, Printer, RefreshCw, FileText } from 'lucide-react'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
@@ -53,83 +52,30 @@ export function ProcessedDocumentViewer({
     fetchTxt()
   }, [textSource, txtUrl])
 
-  const generatePdfFromText = async () => {
+  const requestPdfFromServer = async () => {
     if (!textSource) return
 
     try {
       setIsGenerating(true)
       setError(null)
 
-      const pdfDoc = await PDFDocument.create()
-      let currentPage = pdfDoc.addPage([595, 842])
-      const { width, height } = currentPage.getSize()
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
-      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-
-      currentPage.drawText('DOCUMENTO MÉDICO', {
-        x: 50,
-        y: height - 50,
-        size: 16,
-        font: boldFont,
-        color: rgb(0.1, 0.3, 0.6),
+      const response = await fetch(`/api/patient/documents/${documentId}/pdf`, {
+        method: 'GET',
+        cache: 'no-store',
       })
 
-      currentPage.drawText(patientName || baseName, {
-        x: 50,
-        y: height - 75,
-        size: 10,
-        font,
-        color: rgb(0.4, 0.4, 0.4),
-      })
-
-      const lines = textSource.split('\n')
-      const maxWidth = width - 100
-      const lineHeight = 14
-      let yPosition = height - 110
-
-      const flushLine = (text: string, y: number, f = font) => {
-        currentPage.drawText(text, {
-          x: 50,
-          y,
-          size: 11,
-          font: f,
-          color: rgb(0, 0, 0),
-        })
+      if (!response.ok) {
+        const { error: serverError } = await response.json().catch(() => ({ error: null }))
+        throw new Error(serverError || 'Não foi possível gerar o PDF do relatório.')
       }
 
-      for (const line of lines) {
-        if (yPosition < 100) {
-          currentPage = pdfDoc.addPage([595, 842])
-          const size = currentPage.getSize()
-          yPosition = size.height - 80
-        }
+      const blob = await response.blob()
 
-        const words = line.split(' ')
-        let currentLine = ''
-
-        for (const word of words) {
-          const testLine = currentLine + word + ' '
-          const textWidth = font.widthOfTextAtSize(testLine, 11)
-
-          if (textWidth > maxWidth && currentLine !== '') {
-            flushLine(currentLine.trim(), yPosition)
-            currentLine = word + ' '
-            yPosition -= lineHeight
-          } else {
-            currentLine = testLine
-          }
-        }
-
-        if (currentLine.trim() !== '') {
-          flushLine(currentLine.trim(), yPosition)
-          yPosition -= lineHeight
-        }
+      if (blob.type !== 'application/pdf') {
+        throw new Error('O arquivo retornado não é um PDF válido.')
       }
 
-      const pdfBytes = await pdfDoc.save()
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
-
       setPdfUrl(url)
       onPdfReady?.(url)
     } catch (err: any) {
@@ -142,7 +88,7 @@ export function ProcessedDocumentViewer({
 
   useEffect(() => {
     if (textSource) {
-      generatePdfFromText()
+      requestPdfFromServer()
     }
   }, [textSource])
 
@@ -219,7 +165,7 @@ export function ProcessedDocumentViewer({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={generatePdfFromText} disabled={isGenerating || isFetchingText}>
+          <Button variant="outline" size="sm" onClick={requestPdfFromServer} disabled={isGenerating || isFetchingText}>
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
