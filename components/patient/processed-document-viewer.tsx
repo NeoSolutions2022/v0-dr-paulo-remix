@@ -38,6 +38,11 @@ export function ProcessedDocumentViewer({
   )
 
   useEffect(() => {
+    // Mantém o texto em sincronia com o documento selecionado
+    setTextSource(cleanText?.trim() || '')
+  }, [cleanText])
+
+  useEffect(() => {
     const fetchTxt = async () => {
       if (!txtUrl || textSource) return
       try {
@@ -102,12 +107,12 @@ export function ProcessedDocumentViewer({
   }
 
   useEffect(() => {
-    if (!textSource) return
+    if (!textSource || isFetchingText) return
 
     if (shouldGenerate || triggerKey > 0) {
       requestPdfFromServer()
     }
-  }, [shouldGenerate, triggerKey, textSource])
+  }, [shouldGenerate, triggerKey, textSource, isFetchingText])
 
   useEffect(() => {
     return () => {

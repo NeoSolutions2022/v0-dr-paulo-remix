@@ -4,6 +4,8 @@ import { generatePdfFromText } from "@/lib/pdf-generator"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
+export const runtime = "nodejs"
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
