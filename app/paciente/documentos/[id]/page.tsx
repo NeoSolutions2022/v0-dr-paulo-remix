@@ -37,6 +37,8 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null)
+  const [shouldGeneratePdf, setShouldGeneratePdf] = useState(false)
+  const [generationRequestId, setGenerationRequestId] = useState(0)
 
   useEffect(() => {
     const loadData = async () => {
@@ -104,6 +106,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           return
         }
 
+        setGeneratedPdfUrl(null)
+        setShouldGeneratePdf(false)
+        setGenerationRequestId(0)
         setDocument(documentData)
       } catch (err: any) {
         console.error("Erro ao carregar documento do paciente", err)
@@ -150,6 +155,17 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              setGeneratedPdfUrl(null)
+              setShouldGeneratePdf(true)
+              setGenerationRequestId((prev) => prev + 1)
+            }}
+          >
+            Visualizar
+          </Button>
           {generatedPdfUrl && (
             <Button asChild variant="outline" size="sm">
               <Link href={generatedPdfUrl} download target="_blank">
@@ -183,6 +199,8 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             fileName={document.file_name}
             documentId={document.id}
             patientName={patient?.full_name}
+            shouldGenerate={shouldGeneratePdf}
+            triggerKey={generationRequestId}
             onPdfReady={setGeneratedPdfUrl}
           />
 

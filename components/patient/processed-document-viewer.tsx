@@ -11,6 +11,8 @@ interface ProcessedDocumentViewerProps {
   documentId: string
   txtUrl?: string | null
   patientName?: string | null
+  shouldGenerate?: boolean
+  triggerKey?: number
   onPdfReady?: (pdfUrl: string) => void
 }
 
@@ -20,6 +22,8 @@ export function ProcessedDocumentViewer({
   documentId,
   txtUrl,
   patientName,
+  shouldGenerate = false,
+  triggerKey = 0,
   onPdfReady,
 }: ProcessedDocumentViewerProps) {
   const [textSource, setTextSource] = useState(cleanText?.trim() || '')
@@ -87,10 +91,12 @@ export function ProcessedDocumentViewer({
   }
 
   useEffect(() => {
-    if (textSource) {
+    if (!textSource) return
+
+    if (shouldGenerate || triggerKey > 0) {
       requestPdfFromServer()
     }
-  }, [textSource])
+  }, [shouldGenerate, triggerKey, textSource])
 
   useEffect(() => {
     return () => {
@@ -165,7 +171,12 @@ export function ProcessedDocumentViewer({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={requestPdfFromServer} disabled={isGenerating || isFetchingText}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={requestPdfFromServer}
+            disabled={isGenerating || isFetchingText}
+          >
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -196,11 +207,21 @@ export function ProcessedDocumentViewer({
       <div className="w-full border rounded-lg overflow-hidden bg-white dark:bg-slate-900" style={{ height: '720px' }}>
         {pdfUrl ? (
           <iframe src={pdfUrl} className="w-full h-full" title={`Documento ${documentId}`} />
-        ) : (
+        ) : isGenerating ? (
           <div className="flex h-full items-center justify-center text-slate-500">
             <div className="flex items-center gap-2">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Preparando visualização...</span>
+              <span>Gerando PDF...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center text-slate-500 text-center px-6">
+            <div className="space-y-2">
+              <FileText className="h-10 w-10 opacity-40 mx-auto" />
+              <p className="font-medium">Clique em “Visualizar” para gerar o PDF.</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Usaremos o texto processado (clean_text) para montar um PDF pronto para visualização e download.
+              </p>
             </div>
           </div>
         )}

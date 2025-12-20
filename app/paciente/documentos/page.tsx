@@ -128,7 +128,7 @@ export default function DocumentListPage() {
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/paciente/documentos/${doc.id}`}>
                           <Eye className="h-4 w-4 mr-1" />
-                          Ver
+                          Visualizar
                         </Link>
                       </Button>
                     </div>
