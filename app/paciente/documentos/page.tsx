@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { FileText, Eye, Calendar, AlertCircle, Loader2 } from 'lucide-react'
-import Link from "next/link"
+import { FileText, Eye, Calendar, AlertCircle, Loader2, X } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
 
 type PatientDocument = {
   id: string
@@ -22,6 +22,13 @@ export default function DocumentListPage() {
   const [documents, setDocuments] = useState<PatientDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [viewerDocument, setViewerDocument] = useState<PatientDocument | null>(null)
+  const [viewerTrigger, setViewerTrigger] = useState(0)
+
+  const viewerTitle = useMemo(() => {
+    if (!viewerDocument) return ''
+    return viewerDocument.file_name
+  }, [viewerDocument])
 
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -125,11 +132,16 @@ export default function DocumentListPage() {
                         </div>
                       </div>
 
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/paciente/documentos/${doc.id}`}>
-                          <Eye className="h-4 w-4 mr-1" />
-                          Visualizar
-                        </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setViewerDocument(doc)
+                          setViewerTrigger((prev) => prev + 1)
+                        }}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Visualizar
                       </Button>
                     </div>
                   ))}
@@ -139,6 +151,48 @@ export default function DocumentListPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {viewerDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-6xl max-h-[90vh] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-slate-50 dark:bg-slate-800">
+              <div className="min-w-0">
+                <p className="text-sm text-slate-500 dark:text-slate-300 truncate">Documento</p>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">{viewerTitle}</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewerTrigger((prev) => prev + 1)}
+                  disabled={!viewerDocument.clean_text}
+                >
+                  Reprocessar
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Fechar visualização"
+                  onClick={() => setViewerDocument(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-hidden p-4">
+              <ProcessedDocumentViewer
+                cleanText={viewerDocument.clean_text}
+                fileName={viewerDocument.file_name}
+                documentId={viewerDocument.id}
+                shouldGenerate={true}
+                triggerKey={viewerTrigger}
+                onPdfReady={() => {}}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
