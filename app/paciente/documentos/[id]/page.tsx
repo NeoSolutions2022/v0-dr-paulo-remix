@@ -8,7 +8,6 @@ import { Calendar, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PdfViewer } from "@/components/pdf-viewer"
 import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { createClient } from "@/lib/supabase/client"
@@ -37,6 +36,7 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const [patient, setPatient] = useState<PatientInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -118,26 +118,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
   const hasCpf = !!patient?.cpf
 
-  const { validPdfUrl, invalidPdf } = useMemo(() => {
-    if (!document?.pdf_url) return { validPdfUrl: null as string | null, invalidPdf: false }
-    const url = document.pdf_url
-
-    const isPdfDataUrl = url.startsWith("data:application/pdf")
-    const looksLikePdfFile = /\.pdf($|[?#])/i.test(url)
-    const encodedPdfMime = url.includes("application%2Fpdf")
-
-    const isValid = isPdfDataUrl || looksLikePdfFile || encodedPdfMime
-
-    if (!isValid) {
-      console.warn("PDF inválido ou em formato HTML; usando clean_text para renderizar", {
-        documentId: document?.id,
-      })
-      return { validPdfUrl: null, invalidPdf: true }
-    }
-
-    return { validPdfUrl: url, invalidPdf: false }
-  }, [document?.id, document?.pdf_url])
-
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -170,9 +150,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {validPdfUrl && (
+          {generatedPdfUrl && (
             <Button asChild variant="outline" size="sm">
-              <Link href={validPdfUrl} download target="_blank">
+              <Link href={generatedPdfUrl} download target="_blank">
                 Download PDF
               </Link>
             </Button>
@@ -198,29 +178,13 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          {invalidPdf && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Não foi possível carregar o PDF salvo. Estamos reprocessando o relatório
-                a partir do texto original.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {validPdfUrl ? (
-            <PdfViewer
-              pdfUrl={validPdfUrl}
-              documentId={document.id}
-              fileName={document.file_name}
-            />
-          ) : (
-            <ProcessedDocumentViewer
-              cleanText={document.clean_text}
-              fileName={document.file_name}
-              documentId={document.id}
-              patientName={patient?.full_name}
-            />
-          )}
+          <ProcessedDocumentViewer
+            cleanText={document.clean_text}
+            fileName={document.file_name}
+            documentId={document.id}
+            patientName={patient?.full_name}
+            onPdfReady={setGeneratedPdfUrl}
+          />
 
           {document.hash_sha256 && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">

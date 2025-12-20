@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2, Printer, RefreshCw, FileText } from 'lucide-react'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
@@ -11,6 +12,7 @@ interface ProcessedDocumentViewerProps {
   documentId: string
   txtUrl?: string | null
   patientName?: string | null
+  onPdfReady?: (pdfUrl: string) => void
 }
 
 export function ProcessedDocumentViewer({
@@ -19,10 +21,11 @@ export function ProcessedDocumentViewer({
   documentId,
   txtUrl,
   patientName,
+  onPdfReady,
 }: ProcessedDocumentViewerProps) {
   const [textSource, setTextSource] = useState(cleanText?.trim() || '')
   const [isFetchingText, setIsFetchingText] = useState(!cleanText && !!txtUrl)
-  const [html, setHtml] = useState<string | null>(null)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
@@ -56,22 +59,79 @@ export function ProcessedDocumentViewer({
     try {
       setIsGenerating(true)
       setError(null)
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cleanText: textSource,
-          patientName: patientName || baseName,
-        }),
+
+      const pdfDoc = await PDFDocument.create()
+      let currentPage = pdfDoc.addPage([595, 842])
+      const { width, height } = currentPage.getSize()
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+      currentPage.drawText('DOCUMENTO MÉDICO', {
+        x: 50,
+        y: height - 50,
+        size: 16,
+        font: boldFont,
+        color: rgb(0.1, 0.3, 0.6),
       })
 
-      const data = await response.json()
+      currentPage.drawText(patientName || baseName, {
+        x: 50,
+        y: height - 75,
+        size: 10,
+        font,
+        color: rgb(0.4, 0.4, 0.4),
+      })
 
-      if (!response.ok || !data.html) {
-        throw new Error(data.error || 'Falha ao gerar PDF do relatório')
+      const lines = textSource.split('\n')
+      const maxWidth = width - 100
+      const lineHeight = 14
+      let yPosition = height - 110
+
+      const flushLine = (text: string, y: number, f = font) => {
+        currentPage.drawText(text, {
+          x: 50,
+          y,
+          size: 11,
+          font: f,
+          color: rgb(0, 0, 0),
+        })
       }
 
-      setHtml(data.html as string)
+      for (const line of lines) {
+        if (yPosition < 100) {
+          currentPage = pdfDoc.addPage([595, 842])
+          const size = currentPage.getSize()
+          yPosition = size.height - 80
+        }
+
+        const words = line.split(' ')
+        let currentLine = ''
+
+        for (const word of words) {
+          const testLine = currentLine + word + ' '
+          const textWidth = font.widthOfTextAtSize(testLine, 11)
+
+          if (textWidth > maxWidth && currentLine !== '') {
+            flushLine(currentLine.trim(), yPosition)
+            currentLine = word + ' '
+            yPosition -= lineHeight
+          } else {
+            currentLine = testLine
+          }
+        }
+
+        if (currentLine.trim() !== '') {
+          flushLine(currentLine.trim(), yPosition)
+          yPosition -= lineHeight
+        }
+      }
+
+      const pdfBytes = await pdfDoc.save()
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+
+      setPdfUrl(url)
+      onPdfReady?.(url)
     } catch (err: any) {
       console.error('Erro ao gerar PDF', err)
       setError(err.message || 'Não foi possível gerar o PDF do relatório.')
@@ -86,30 +146,42 @@ export function ProcessedDocumentViewer({
     }
   }, [textSource])
 
-  const handleDownloadPdf = () => {
-    if (!html) return
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+      }
+    }
+  }, [pdfUrl])
 
-    const blob = new Blob([html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
+  const handleDownloadPdf = () => {
+    if (!pdfUrl) return
+
     const anchor = document.createElement('a')
-    anchor.href = url
+    anchor.href = pdfUrl
     anchor.download = `${baseName}.pdf`
     anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   const handlePrint = () => {
-    if (!html) return
+    if (!pdfUrl) return
 
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.src = pdfUrl
+    document.body.appendChild(iframe)
 
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
-    }, 150)
+    iframe.onload = () => {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+      setTimeout(() => {
+        iframe.remove()
+      }, 500)
+    }
   }
 
   const handleDownloadTxt = () => {
@@ -164,11 +236,11 @@ export function ProcessedDocumentViewer({
             <Download className="mr-2 h-4 w-4" />
             TXT
           </Button>
-          <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!html}>
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!pdfUrl}>
             <Download className="mr-2 h-4 w-4" />
             PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!html}>
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!pdfUrl}>
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
           </Button>
@@ -176,8 +248,8 @@ export function ProcessedDocumentViewer({
       </div>
 
       <div className="w-full border rounded-lg overflow-hidden bg-white dark:bg-slate-900" style={{ height: '720px' }}>
-        {html ? (
-          <iframe srcDoc={html} className="w-full h-full" title={`Documento ${documentId}`} />
+        {pdfUrl ? (
+          <iframe src={pdfUrl} className="w-full h-full" title={`Documento ${documentId}`} />
         ) : (
           <div className="flex h-full items-center justify-center text-slate-500">
             <div className="flex items-center gap-2">
