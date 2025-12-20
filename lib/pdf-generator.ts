@@ -80,7 +80,9 @@ export async function generatePdfFromText(
     margin: 1,
   })
 
-  const qrImageBytes = await fetch(qrDataUrl).then(res => res.arrayBuffer())
+  // Evita dependência de fetch em data: URLs (que falha no runtime do servidor)
+  const qrBase64 = qrDataUrl.split(',')[1]
+  const qrImageBytes = Buffer.from(qrBase64, 'base64')
   const qrImage = await pdfDoc.embedPng(qrImageBytes)
   const qrDims = qrImage.scale(0.6)
 
