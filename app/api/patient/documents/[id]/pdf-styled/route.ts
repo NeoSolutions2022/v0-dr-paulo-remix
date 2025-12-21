@@ -66,8 +66,39 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
   const patientName = document.file_name?.replace(/\.[^/.]+$/, "") || "Paciente"
   const documentHash = crypto.createHash("sha256").update(document.clean_text).digest("hex").slice(0, 16)
-  const variables = extractAllVariables(document.clean_text, patientName, "", {})
-  const html = generatePremiumPDFHTML(variables, documentHash)
+
+  let html: string | null = null
+
+  try {
+    const variables = extractAllVariables(document.clean_text, patientName, "", {})
+    html = generatePremiumPDFHTML(variables, documentHash)
+  } catch (templateError) {
+    console.error("Erro ao montar HTML premium para PDF estilizado, usando fallback", templateError)
+  }
+
+  if (!html) {
+    const safeText = document.clean_text.replace(/[\u0000\u0001\u0002\u0003]/g, "").trim() || "Relatório indisponível"
+    const escaped = safeText
+      .split("\n")
+      .map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br />")
+
+    html = `<!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${patientName}</title>
+          <style>
+            body { font-family: 'Noto Sans', 'Helvetica', 'Arial', sans-serif; padding: 24px; line-height: 1.5; }
+            h1 { font-size: 20px; margin-bottom: 12px; color: #0f172a; }
+            .content { white-space: normal; font-size: 12px; color: #0f172a; }
+          </style>
+        </head>
+        <body>
+          <h1>Relatório do paciente</h1>
+          <div class="content">${escaped}</div>
+        </body>
+      </html>`
+  }
 
   try {
     const browser = await getBrowser()
