@@ -171,6 +171,52 @@ async function buildPdfLocally(text: string, title: string): Promise<Blob> {
   return new Blob([pdfBytes], { type: 'application/pdf' })
 }
 
+async function loadHtml2Pdf(): Promise<any> {
+  if (typeof window === 'undefined') return null
+  if ((window as any).html2pdf) return (window as any).html2pdf
+
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src =
+      'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js'
+    script.async = true
+    script.onload = () => resolve((window as any).html2pdf)
+    script.onerror = () => reject(new Error('Não foi possível carregar html2pdf'))
+    document.body.appendChild(script)
+  })
+}
+
+async function buildStyledPdfFromHtml(html: string, fileName: string): Promise<Blob> {
+  const html2pdf = await loadHtml2Pdf()
+  if (!html2pdf) throw new Error('Ferramenta de PDF indisponível no navegador')
+
+  const container = document.createElement('div')
+  container.innerHTML = html
+  container.style.position = 'absolute'
+  container.style.left = '-9999px'
+  container.style.top = '-9999px'
+  document.body.appendChild(container)
+
+  try {
+    const worker = html2pdf()
+      .from(container)
+      .set({
+        margin: [10, 10, 10, 10],
+        filename: `${fileName}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 1.2, useCORS: true },
+        jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+      })
+      .toPdf()
+
+    const pdf = await worker.get('pdf')
+    const blob = pdf.output('blob') as Blob
+    return blob
+  } finally {
+    container.remove()
+  }
+}
+
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
   fileName: string
@@ -197,6 +243,7 @@ export function ProcessedDocumentViewer({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isStyled, setIsStyled] = useState(false)
 
   const baseName = useMemo(
     () => fileName.replace(/\.[^/.]+$/, '') || 'documento',
@@ -236,14 +283,31 @@ export function ProcessedDocumentViewer({
     try {
       setIsGenerating(true)
       setError(null)
+      setIsStyled(false)
 
-      const blob = await buildPdfLocally(textSource, baseName)
+      // Tenta primeiro o fluxo estilizado baseado no HTML premium
+      const response = await fetch(`/api/patient/documents/${documentId}/styled-html`)
+      if (!response.ok) {
+        throw new Error('Não foi possível carregar o HTML estilizado do relatório.')
+      }
+
+      const { html } = (await response.json()) as { html: string }
+      const blob = await buildStyledPdfFromHtml(html, baseName)
       const url = URL.createObjectURL(blob)
       setPdfUrl(url)
+      setIsStyled(true)
       onPdfReady?.(url)
-    } catch (err: any) {
-      console.error('Erro ao gerar PDF', err)
-      setError(err.message || 'Não foi possível gerar o PDF do relatório.')
+    } catch (styledError: any) {
+      console.warn('Falha na geração estilizada, aplicando fallback textual', styledError)
+      try {
+        const blob = await buildPdfLocally(textSource, baseName)
+        const url = URL.createObjectURL(blob)
+        setPdfUrl(url)
+        onPdfReady?.(url)
+      } catch (err: any) {
+        console.error('Erro ao gerar PDF', err)
+        setError(err.message || 'Não foi possível gerar o PDF do relatório.')
+      }
     } finally {
       setIsGenerating(false)
     }
@@ -354,7 +418,7 @@ export function ProcessedDocumentViewer({
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!pdfUrl}>
             <Download className="mr-2 h-4 w-4" />
-            PDF
+            PDF {isStyled ? '(estilizado)' : ''}
           </Button>
           <Button variant="outline" size="sm" onClick={handlePrint} disabled={!pdfUrl}>
             <Printer className="mr-2 h-4 w-4" />
