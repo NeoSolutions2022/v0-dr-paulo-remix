@@ -285,7 +285,21 @@ export function ProcessedDocumentViewer({
       setError(null)
       setIsStyled(false)
 
-      // Tenta primeiro o fluxo estilizado baseado no HTML premium
+      // 1) Tenta gerar PDF estilizado direto do servidor (puppeteer)
+      const styledPdfResponse = await fetch(`/api/patient/documents/${documentId}/pdf-styled`, {
+        cache: 'no-store',
+      })
+
+      if (styledPdfResponse.ok && styledPdfResponse.headers.get('content-type')?.includes('application/pdf')) {
+        const blob = await styledPdfResponse.blob()
+        const url = URL.createObjectURL(blob)
+        setPdfUrl(url)
+        setIsStyled(true)
+        onPdfReady?.(url)
+        return
+      }
+
+      // 2) Se o servidor falhar, tenta gerar no cliente a partir do HTML estilizado
       const response = await fetch(`/api/patient/documents/${documentId}/styled-html`)
       if (!response.ok) {
         throw new Error('Não foi possível carregar o HTML estilizado do relatório.')

@@ -45,3 +45,7 @@ INFORMAÇÕES ADICIONAIS
 - [ ] Garantir fontes remotas (Noto Sans/Roboto) ou usar CSS web fonts no HTML template.
 - [ ] Testar com texto >150k caracteres e com acentuação/combining (erro WinAnsi).
 - [ ] Documentar limites de tamanho e timeouts no README do paciente.
+
+## Notas de implementação (atualizadas)
+- A rota `pdf-styled` deve usar `generatePremiumPDFHTML` diretamente (sem round-trip HTTP) e pode tentar `puppeteer`/Chromium com `runtime="nodejs"`. Quando indisponível, o cliente deve recair para a conversão via `html2pdf` com o HTML fornecido por `/styled-html` e, se ainda falhar, para o PDF textual.
+- O modal do paciente precisa sempre tentar na ordem: PDF estilizado do servidor → HTML estilizado com `html2pdf` → PDF textual. Isso evita falhas 500/502 de runtime e mantém o download disponível.

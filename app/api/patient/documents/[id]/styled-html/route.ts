@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import crypto from "crypto"
+
+import { generatePremiumPDFHTML, extractAllVariables } from "@/app/api/generate-pdf/route"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -41,27 +45,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Documento sem clean_text" }, { status: 400 })
   }
 
-  const origin = new URL(request.url).origin
-
   try {
-    const response = await fetch(`${origin}/api/generate-pdf`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        cleanText: document.clean_text,
-        patientName: document.file_name?.replace(/\.[^/.]+$/, "") || "Paciente",
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "")
-      console.error("Falha ao gerar HTML estilizado", response.status, errorText)
-      return NextResponse.json({ error: "Não foi possível gerar o PDF estilizado" }, { status: 500 })
-    }
-
-    const { html, documentHash } = (await response.json()) as { html: string; documentHash?: string }
+    const patientName = document.file_name?.replace(/\.[^/.]+$/, "") || "Paciente"
+    const documentHash = crypto.createHash("sha256").update(document.clean_text).digest("hex").slice(0, 16)
+    const variables = extractAllVariables(document.clean_text, patientName, "", {})
+    const html = generatePremiumPDFHTML(variables, documentHash)
 
     return NextResponse.json(
       { html, documentHash },

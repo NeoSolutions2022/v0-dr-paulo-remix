@@ -63,11 +63,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-interface PDFVariables {
+export interface PDFVariables {
   [key: string]: string
 }
 
-function extractAllVariables(
+export function extractAllVariables(
   cleanText: string,
   patientName: string,
   doctorName: string,
@@ -342,7 +342,7 @@ function extractAllVariables(
   return { ...baseVariables, ...customFields }
 }
 
-function generatePremiumPDFHTML(variables: PDFVariables, documentHash: string): string {
+export function generatePremiumPDFHTML(variables: PDFVariables, documentHash: string): string {
   const escapeHtml = (text: string): string => {
     const map: Record<string, string> = {
       "&": "&amp;",
