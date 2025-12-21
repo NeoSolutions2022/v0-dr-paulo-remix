@@ -4,6 +4,172 @@ import { useEffect, useMemo, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Download, Loader2, Printer, RefreshCw, FileText } from 'lucide-react'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import fontkit from '@pdf-lib/fontkit'
+
+function sanitizeText(text: string) {
+  return text
+    .replace(/\u0000/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim()
+}
+
+const REGULAR_FONT_SOURCES = [
+  'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf',
+]
+
+const BOLD_FONT_SOURCES = [
+  'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf',
+]
+
+let regularFontPromise: Promise<Uint8Array> | null = null
+let boldFontPromise: Promise<Uint8Array> | null = null
+
+async function loadFromSources(sources: string[]) {
+  for (const source of sources) {
+    try {
+      const response = await fetch(source)
+      if (!response.ok) {
+        console.warn(`Não foi possível carregar a fonte em ${source}: ${response.status}`)
+        continue
+      }
+      const buffer = await response.arrayBuffer()
+      return new Uint8Array(buffer)
+    } catch (error) {
+      console.warn(`Erro ao baixar fonte de ${source}`, error)
+      continue
+    }
+  }
+  throw new Error('Nenhuma fonte disponível para o cliente')
+}
+
+async function getClientFonts(pdfDoc: PDFDocument) {
+  try {
+    pdfDoc.registerFontkit(fontkit)
+
+    if (!regularFontPromise) {
+      regularFontPromise = loadFromSources(REGULAR_FONT_SOURCES)
+    }
+    if (!boldFontPromise) {
+      boldFontPromise = loadFromSources(BOLD_FONT_SOURCES)
+    }
+
+    const [regularBytes, boldBytes] = await Promise.all([
+      regularFontPromise,
+      boldFontPromise,
+    ])
+
+    const font = await pdfDoc.embedFont(regularBytes, { subset: true })
+    const boldFont = await pdfDoc.embedFont(boldBytes ?? regularBytes, {
+      subset: true,
+    })
+
+    return { font, boldFont }
+  } catch (error) {
+    console.warn('Falha ao carregar fontes Noto Sans no cliente, usando padrão', error)
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+    return { font, boldFont }
+  }
+}
+
+async function buildPdfLocally(text: string, title: string): Promise<Blob> {
+  const pdfDoc = await PDFDocument.create()
+  const { font, boldFont } = await getClientFonts(pdfDoc)
+
+  const pageWidth = 595
+  const pageHeight = 842
+  const margin = 50
+  const maxWidth = pageWidth - margin * 2
+  const lineHeight = 14
+
+  const createPage = (pageIndex: number) => {
+    const page = pdfDoc.addPage([pageWidth, pageHeight])
+
+    page.drawText(title || 'Documento', {
+      x: margin,
+      y: pageHeight - margin,
+      size: 16,
+      font: boldFont,
+      color: rgb(0.1, 0.3, 0.6),
+    })
+
+    page.drawText(`Página ${pageIndex}`, {
+      x: pageWidth - margin - 80,
+      y: pageHeight - margin - 20,
+      size: 9,
+      font,
+      color: rgb(0.5, 0.5, 0.5),
+    })
+
+    return { page, y: pageHeight - margin - 40 }
+  }
+
+  const pages: { page: any; y: number }[] = [createPage(1)]
+
+  const drawLine = (content: string) => {
+    const current = pages[pages.length - 1]
+
+    if (current.y < margin + lineHeight * 2) {
+      pages.push(createPage(pages.length + 1))
+    }
+
+    const target = pages[pages.length - 1]
+    target.page.drawText(content, {
+      x: margin,
+      y: target.y,
+      size: 11,
+      font,
+      color: rgb(0, 0, 0),
+    })
+    target.y -= lineHeight
+  }
+
+  const wordsPerLine = (line: string) => {
+    const words = line.split(' ')
+    let buffer = ''
+
+    const flush = () => {
+      if (buffer.trim()) {
+        drawLine(buffer.trim())
+      }
+      buffer = ''
+    }
+
+    for (const word of words) {
+      const candidate = `${buffer}${word} `
+      const width = font.widthOfTextAtSize(candidate, 11)
+      if (width > maxWidth && buffer.trim() !== '') {
+        flush()
+        buffer = `${word} `
+      } else {
+        buffer = candidate
+      }
+    }
+
+    if (buffer.trim()) {
+      flush()
+    }
+  }
+
+  const normalized = sanitizeText(text) || 'Conteúdo indisponível.'
+
+  for (const line of normalized.split('\n')) {
+    if (!line.trim()) {
+      const current = pages[pages.length - 1]
+      if (current.y < margin + lineHeight * 2) {
+        pages.push(createPage(pages.length + 1))
+      }
+      pages[pages.length - 1].y -= lineHeight
+      continue
+    }
+    wordsPerLine(line)
+  }
+
+  const pdfBytes = await pdfDoc.save()
+  return new Blob([pdfBytes], { type: 'application/pdf' })
+}
 
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
@@ -11,6 +177,9 @@ interface ProcessedDocumentViewerProps {
   documentId: string
   txtUrl?: string | null
   patientName?: string | null
+  shouldGenerate?: boolean
+  triggerKey?: number
+  onPdfReady?: (pdfUrl: string) => void
 }
 
 export function ProcessedDocumentViewer({
@@ -19,10 +188,13 @@ export function ProcessedDocumentViewer({
   documentId,
   txtUrl,
   patientName,
+  shouldGenerate = false,
+  triggerKey = 0,
+  onPdfReady,
 }: ProcessedDocumentViewerProps) {
   const [textSource, setTextSource] = useState(cleanText?.trim() || '')
   const [isFetchingText, setIsFetchingText] = useState(!cleanText && !!txtUrl)
-  const [html, setHtml] = useState<string | null>(null)
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
@@ -30,6 +202,11 @@ export function ProcessedDocumentViewer({
     () => fileName.replace(/\.[^/.]+$/, '') || 'documento',
     [fileName],
   )
+
+  useEffect(() => {
+    // Mantém o texto em sincronia com o documento selecionado
+    setTextSource(cleanText?.trim() || '')
+  }, [cleanText])
 
   useEffect(() => {
     const fetchTxt = async () => {
@@ -50,28 +227,20 @@ export function ProcessedDocumentViewer({
     fetchTxt()
   }, [textSource, txtUrl])
 
-  const generatePdfFromText = async () => {
-    if (!textSource) return
+  const requestPdfFromServer = async () => {
+    if (!textSource) {
+      setError('Documento sem texto processado para gerar PDF.')
+      return
+    }
 
     try {
       setIsGenerating(true)
       setError(null)
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cleanText: textSource,
-          patientName: patientName || baseName,
-        }),
-      })
 
-      const data = await response.json()
-
-      if (!response.ok || !data.html) {
-        throw new Error(data.error || 'Falha ao gerar PDF do relatório')
-      }
-
-      setHtml(data.html as string)
+      const blob = await buildPdfLocally(textSource, baseName)
+      const url = URL.createObjectURL(blob)
+      setPdfUrl(url)
+      onPdfReady?.(url)
     } catch (err: any) {
       console.error('Erro ao gerar PDF', err)
       setError(err.message || 'Não foi possível gerar o PDF do relatório.')
@@ -81,35 +250,49 @@ export function ProcessedDocumentViewer({
   }
 
   useEffect(() => {
-    if (textSource) {
-      generatePdfFromText()
+    if (!textSource || isFetchingText) return
+
+    if (shouldGenerate || triggerKey > 0) {
+      requestPdfFromServer()
     }
-  }, [textSource])
+  }, [shouldGenerate, triggerKey, textSource, isFetchingText])
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+      }
+    }
+  }, [pdfUrl])
 
   const handleDownloadPdf = () => {
-    if (!html) return
+    if (!pdfUrl) return
 
-    const blob = new Blob([html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
-    anchor.href = url
+    anchor.href = pdfUrl
     anchor.download = `${baseName}.pdf`
     anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   const handlePrint = () => {
-    if (!html) return
+    if (!pdfUrl) return
 
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.src = pdfUrl
+    document.body.appendChild(iframe)
 
-    printWindow.document.write(html)
-    printWindow.document.close()
-    printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
-    }, 150)
+    iframe.onload = () => {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+      setTimeout(() => {
+        iframe.remove()
+      }, 500)
+    }
   }
 
   const handleDownloadTxt = () => {
@@ -147,7 +330,12 @@ export function ProcessedDocumentViewer({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={generatePdfFromText} disabled={isGenerating || isFetchingText}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={requestPdfFromServer}
+            disabled={isGenerating || isFetchingText}
+          >
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -164,11 +352,11 @@ export function ProcessedDocumentViewer({
             <Download className="mr-2 h-4 w-4" />
             TXT
           </Button>
-          <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!html}>
+          <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!pdfUrl}>
             <Download className="mr-2 h-4 w-4" />
             PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!html}>
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={!pdfUrl}>
             <Printer className="mr-2 h-4 w-4" />
             Imprimir
           </Button>
@@ -176,13 +364,23 @@ export function ProcessedDocumentViewer({
       </div>
 
       <div className="w-full border rounded-lg overflow-hidden bg-white dark:bg-slate-900" style={{ height: '720px' }}>
-        {html ? (
-          <iframe srcDoc={html} className="w-full h-full" title={`Documento ${documentId}`} />
-        ) : (
+        {pdfUrl ? (
+          <iframe src={pdfUrl} className="w-full h-full" title={`Documento ${documentId}`} />
+        ) : isGenerating ? (
           <div className="flex h-full items-center justify-center text-slate-500">
             <div className="flex items-center gap-2">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Preparando visualização...</span>
+              <span>Gerando PDF...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center text-slate-500 text-center px-6">
+            <div className="space-y-2">
+              <FileText className="h-10 w-10 opacity-40 mx-auto" />
+              <p className="font-medium">Clique em “Visualizar” para gerar o PDF.</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Usaremos o texto processado (clean_text) para montar um PDF pronto para visualização e download.
+              </p>
             </div>
           </div>
         )}
