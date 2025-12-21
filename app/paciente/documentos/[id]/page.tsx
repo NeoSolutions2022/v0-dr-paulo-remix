@@ -8,7 +8,6 @@ import { Calendar, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { PdfViewer } from "@/components/pdf-viewer"
 import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { createClient } from "@/lib/supabase/client"
@@ -37,6 +36,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const [patient, setPatient] = useState<PatientInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null)
+  const [shouldGeneratePdf, setShouldGeneratePdf] = useState(false)
+  const [generationRequestId, setGenerationRequestId] = useState(0)
 
   useEffect(() => {
     const loadData = async () => {
@@ -104,6 +106,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           return
         }
 
+        setGeneratedPdfUrl(null)
+        setShouldGeneratePdf(false)
+        setGenerationRequestId(0)
         setDocument(documentData)
       } catch (err: any) {
         console.error("Erro ao carregar documento do paciente", err)
@@ -150,9 +155,20 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {document.pdf_url && (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              setGeneratedPdfUrl(null)
+              setShouldGeneratePdf(true)
+              setGenerationRequestId((prev) => prev + 1)
+            }}
+          >
+            Visualizar
+          </Button>
+          {generatedPdfUrl && (
             <Button asChild variant="outline" size="sm">
-              <Link href={document.pdf_url} download target="_blank">
+              <Link href={generatedPdfUrl} download target="_blank">
                 Download PDF
               </Link>
             </Button>
@@ -178,20 +194,15 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          {document.pdf_url ? (
-            <PdfViewer
-              pdfUrl={document.pdf_url}
-              documentId={document.id}
-              fileName={document.file_name}
-            />
-          ) : (
-            <ProcessedDocumentViewer
-              cleanText={document.clean_text}
-              fileName={document.file_name}
-              documentId={document.id}
-              patientName={patient?.full_name}
-            />
-          )}
+          <ProcessedDocumentViewer
+            cleanText={document.clean_text}
+            fileName={document.file_name}
+            documentId={document.id}
+            patientName={patient?.full_name}
+            shouldGenerate={shouldGeneratePdf}
+            triggerKey={generationRequestId}
+            onPdfReady={setGeneratedPdfUrl}
+          />
 
           {document.hash_sha256 && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
