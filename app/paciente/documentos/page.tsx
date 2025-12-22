@@ -30,6 +30,18 @@ export default function DocumentListPage() {
     return viewerDocument.file_name
   }, [viewerDocument])
 
+  const handleOpenHtml = (cleanText?: string | null) => {
+    if (!cleanText) {
+      setError('Documento sem texto processado para gerar HTML.')
+      return
+    }
+
+    if (typeof window === 'undefined') return
+
+    sessionStorage.setItem('patient-report-clean-text', cleanText)
+    window.open('/report/index.html', '_blank', 'noopener')
+  }
+
   useEffect(() => {
     const fetchDocuments = async () => {
       const response = await fetch('/api/patient/documents', {
@@ -132,17 +144,28 @@ export default function DocumentListPage() {
                         </div>
                       </div>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setViewerDocument(doc)
-                          setViewerTrigger((prev) => prev + 1)
-                        }}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        Visualizar
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setViewerDocument(doc)
+                            setViewerTrigger((prev) => prev + 1)
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Visualizar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenHtml(doc.clean_text)}
+                          disabled={!doc.clean_text}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          HTML
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -457,6 +457,18 @@ export function ProcessedDocumentViewer({
     anchor.click()
   }
 
+  const handleOpenHtml = () => {
+    if (!textSource) {
+      setError('Documento sem texto processado para gerar HTML.')
+      return
+    }
+
+    if (typeof window === 'undefined') return
+
+    sessionStorage.setItem('patient-report-clean-text', textSource)
+    window.open('/report/index.html', '_blank', 'noopener')
+  }
+
   const handlePrint = () => {
     if (!pdfUrl) return
 
@@ -534,6 +546,10 @@ export function ProcessedDocumentViewer({
           <Button variant="outline" size="sm" onClick={handleDownloadTxt} disabled={!textSource}>
             <Download className="mr-2 h-4 w-4" />
             TXT
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleOpenHtml} disabled={!textSource}>
+            <FileText className="mr-2 h-4 w-4" />
+            HTML
           </Button>
           <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={!pdfUrl}>
             <Download className="mr-2 h-4 w-4" />
