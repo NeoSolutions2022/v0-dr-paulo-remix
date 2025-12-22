@@ -324,6 +324,26 @@ export function ProcessedDocumentViewer({
     } catch (styledError: any) {
       console.warn('Falha na geração estilizada, aplicando fallback textual', styledError)
       try {
+        // 3) Tenta usar a mesma pipeline da Home (/api/generate-pdf) para obter HTML estilizado
+        const premiumResponse = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cleanText: textSource, patientName: patientName || baseName }),
+        })
+
+        if (premiumResponse.ok) {
+          const { html } = (await premiumResponse.json()) as { html?: string }
+          if (html) {
+            const blob = await buildStyledPdfFromHtml(html, baseName)
+            const url = URL.createObjectURL(blob)
+            setPdfUrl(url)
+            setIsStyled(true)
+            onPdfReady?.(url)
+            return
+          }
+        }
+
+        // 4) Último recurso: PDF textual simples
         const blob = await buildPdfLocally(textSource, baseName)
         const url = URL.createObjectURL(blob)
         setPdfUrl(url)
