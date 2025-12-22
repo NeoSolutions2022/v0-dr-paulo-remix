@@ -5,6 +5,7 @@ import crypto from "crypto"
 import { generatePremiumPDFHTML, extractAllVariables } from "@/app/api/generate-pdf/route"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { sanitizeText } from "@/lib/pdf-generator"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -46,20 +47,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 
   try {
+    const sanitizedText = sanitizeText(document.clean_text)
     const patientName = document.file_name?.replace(/\.[^/.]+$/, "") || "Paciente"
-    const documentHash = crypto.createHash("sha256").update(document.clean_text).digest("hex").slice(0, 16)
+    const documentHash = crypto.createHash("sha256").update(sanitizedText).digest("hex").slice(0, 16)
 
     let html: string | null = null
 
     try {
-      const variables = extractAllVariables(document.clean_text, patientName, "", {})
+      const variables = extractAllVariables(sanitizedText, patientName, "", {})
       html = generatePremiumPDFHTML(variables, documentHash)
     } catch (templateError) {
       console.error("Erro ao gerar HTML estilizado via template, usando fallback simples", templateError)
     }
 
     if (!html) {
-      const safeText = document.clean_text.replace(/[\u0000\u0001\u0002\u0003]/g, "").trim() || "Relatório indisponível"
+      const safeText = sanitizedText || "Relatório indisponível"
       const escaped = safeText
         .split("\n")
         .map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br />")

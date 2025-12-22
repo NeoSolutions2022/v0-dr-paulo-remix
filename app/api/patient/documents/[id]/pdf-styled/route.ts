@@ -5,11 +5,13 @@ import puppeteer, { Browser } from "puppeteer"
 import { extractAllVariables, generatePremiumPDFHTML } from "@/app/api/generate-pdf/route"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { sanitizeText } from "@/lib/pdf-generator"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 let browserPromise: Promise<Browser> | null = null
+const pdfCache = new Map<string, { hash: string; buffer: Buffer }>()
 
 async function getBrowser() {
   if (!browserPromise) {
@@ -64,20 +66,34 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "Documento sem clean_text" }, { status: 400 })
   }
 
+  const sanitizedText = sanitizeText(document.clean_text)
   const patientName = document.file_name?.replace(/\.[^/.]+$/, "") || "Paciente"
-  const documentHash = crypto.createHash("sha256").update(document.clean_text).digest("hex").slice(0, 16)
+  const documentHash = crypto.createHash("sha256").update(sanitizedText).digest("hex").slice(0, 16)
+  const cacheKey = `${documentId}:${documentHash}`
+
+  const cached = pdfCache.get(cacheKey)
+  if (cached?.hash === documentHash) {
+    return new NextResponse(cached.buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename=\"${patientName}.pdf\"`,
+        "Cache-Control": "no-store",
+      },
+    })
+  }
 
   let html: string | null = null
 
   try {
-    const variables = extractAllVariables(document.clean_text, patientName, "", {})
+    const variables = extractAllVariables(sanitizedText, patientName, "", {})
     html = generatePremiumPDFHTML(variables, documentHash)
   } catch (templateError) {
     console.error("Erro ao montar HTML premium para PDF estilizado, usando fallback", templateError)
   }
 
   if (!html) {
-    const safeText = document.clean_text.replace(/[\u0000\u0001\u0002\u0003]/g, "").trim() || "Relatório indisponível"
+    const safeText = sanitizedText || "Relatório indisponível"
     const escaped = safeText
       .split("\n")
       .map((line) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br />")
@@ -113,7 +129,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     })
     await page.close()
 
-    return new NextResponse(pdfBuffer, {
+    const buffer = Buffer.from(pdfBuffer)
+    pdfCache.set(cacheKey, { hash: documentHash, buffer })
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

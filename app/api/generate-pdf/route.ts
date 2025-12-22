@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { sanitizeText } from "@/lib/pdf-generator"
 
 interface PDFPremiumPayload {
   cleanText: string
@@ -33,14 +34,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "cleanText é obrigatório" }, { status: 400 })
     }
 
+    const normalizedCleanText = sanitizeText(cleanText)
+
     const documentContent = JSON.stringify({
-      cleanText,
+      cleanText: normalizedCleanText,
       customFields,
       timestamp: new Date().toISOString(),
     })
     const documentHash = crypto.createHash("sha256").update(documentContent).digest("hex").substring(0, 16)
 
-    const variables = extractAllVariables(cleanText, patientName, doctorName, customFields)
+    const variables = extractAllVariables(normalizedCleanText, patientName, doctorName, customFields)
     const htmlContent = generatePremiumPDFHTML(variables, documentHash)
 
     return NextResponse.json(

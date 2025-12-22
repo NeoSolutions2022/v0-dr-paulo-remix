@@ -36,7 +36,7 @@ async function loadFontBytes(sources: string[]): Promise<Uint8Array> {
   throw new Error('Nenhuma fonte disponível nas fontes configuradas')
 }
 
-function sanitizeText(text: string): string {
+export function sanitizeText(text: string): string {
   if (!text) return ''
 
   // Remove caracteres nulos e normaliza quebras de linha para evitar falhas do pdf-lib

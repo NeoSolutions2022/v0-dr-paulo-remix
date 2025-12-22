@@ -306,17 +306,9 @@ export function ProcessedDocumentViewer({
         return
       }
 
-      // 2) Se o servidor falhar, tenta gerar HTML estilizado diretamente via pipeline da Home
-      //    usando o clean_text em memória. Isso evita depender do endpoint de HTML por ID.
-      const response = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cleanText: textSource,
-          patientName: patientName || baseName,
-          doctorName: 'Dr. Paulo Henrique de Moura Reis',
-          customFields: {},
-        }),
+      // 2) Se o servidor falhar, tenta obter o HTML estilizado dedicado do documento
+      const response = await fetch(`/api/patient/documents/${documentId}/styled-html`, {
+        cache: 'no-store',
       })
 
       if (!response.ok) {
