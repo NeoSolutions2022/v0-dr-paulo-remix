@@ -186,13 +186,36 @@ async function loadHtml2Pdf(): Promise<any> {
   })
 }
 
+function sanitizeHtmlForCanvas(html: string) {
+  // html2canvas não suporta color functions modernas (lab, lch, oklab, oklch, color-mix, color()).
+  // Alguns templates também espalham estas funções em múltiplas linhas, então usamos flags /gis para pegar
+  // variações com quebras de linha ou espaços extras.
+  const FALLBACK = '#0f172a'
+
+  return html
+    .replace(/lab\s*\([^)]*\)/gis, FALLBACK)
+    .replace(/lch\s*\([^)]*\)/gis, FALLBACK)
+    .replace(/oklab\s*\([^)]*\)/gis, FALLBACK)
+    .replace(/oklch\s*\([^)]*\)/gis, FALLBACK)
+    .replace(/color-mix\s*\([^)]*\)/gis, FALLBACK)
+    // Em alguns casos, o template usa color(srgb ...). Substituímos qualquer color() genérico.
+    .replace(/color\s*\([^)]*\)/gis, FALLBACK)
+    // Remove funções que possam ter ficado penduradas dentro de gradientes.
+    .replace(/linear-gradient\s*\([^)]*\)/gis, FALLBACK)
+    .replace(/radial-gradient\s*\([^)]*\)/gis, FALLBACK)
+    // Normaliza atributos style inline que possam conter as funções acima.
+    .replace(/color:\s*([^;>{}]*)/gis, (_, value) =>
+      /lab|lch|oklab|oklch|color-mix|color\s*\(/i.test(value) ? `color: ${FALLBACK}` : `color: ${value}`,
+    )
+    .replace(/background:\s*([^;>{}]*)/gis, (_, value) =>
+      /lab|lch|oklab|oklch|color-mix|color\s*\(|gradient/i.test(value)
+        ? `background: ${FALLBACK}`
+        : `background: ${value}`,
+    )
+}
+
 async function buildStyledPdfFromHtml(html: string, fileName: string): Promise<Blob> {
-  // html2canvas não suporta funções de cor CSS modernas (ex.: lab(), lch(), color-mix).
-  // Normalizamos para um fallback seguro antes de inserir no DOM para evitar falhas de parsing.
-  const sanitizedHtml = html
-    .replace(/lab\([^)]*\)/gi, '#003d7a')
-    .replace(/lch\([^)]*\)/gi, '#003d7a')
-    .replace(/color-mix\([^)]*\)/gi, '#003d7a')
+  const sanitizedHtml = sanitizeHtmlForCanvas(html)
 
   const html2pdf = await loadHtml2Pdf()
   if (!html2pdf) throw new Error('Ferramenta de PDF indisponível no navegador')
