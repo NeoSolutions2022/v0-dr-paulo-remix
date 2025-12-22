@@ -73,6 +73,7 @@ export default function AdminHomePage() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
     () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
@@ -99,6 +100,13 @@ export default function AdminHomePage() {
     verifySession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const scrollToUpload = () => {
+    const section = document.getElementById(uploadSectionId)
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }
 
   const loadPatients = async () => {
     setLoadingPatients(true)
@@ -259,19 +267,22 @@ export default function AdminHomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-muted-foreground">Painel administrativo</p>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Users className="h-6 w-6 text-blue-600" /> Doutor Paulo
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
-              {loadingPatients ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando
-                </>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Painel administrativo</p>
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <Users className="h-6 w-6 text-blue-600" /> Doutor Paulo
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={scrollToUpload}>
+                <Upload className="mr-2 h-4 w-4" /> Novo relatório
+              </Button>
+              <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
+                {loadingPatients ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando
+                  </>
               ) : (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" /> Atualizar lista
@@ -540,7 +551,7 @@ export default function AdminHomePage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card className="shadow-sm" id={uploadSectionId}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <Upload className="h-5 w-5 text-blue-600" /> Novo paciente por relatório .txt
