@@ -187,11 +187,18 @@ async function loadHtml2Pdf(): Promise<any> {
 }
 
 async function buildStyledPdfFromHtml(html: string, fileName: string): Promise<Blob> {
+  // html2canvas não suporta funções de cor CSS modernas (ex.: lab(), lch(), color-mix).
+  // Normalizamos para um fallback seguro antes de inserir no DOM para evitar falhas de parsing.
+  const sanitizedHtml = html
+    .replace(/lab\([^)]*\)/gi, '#003d7a')
+    .replace(/lch\([^)]*\)/gi, '#003d7a')
+    .replace(/color-mix\([^)]*\)/gi, '#003d7a')
+
   const html2pdf = await loadHtml2Pdf()
   if (!html2pdf) throw new Error('Ferramenta de PDF indisponível no navegador')
 
   const container = document.createElement('div')
-  container.innerHTML = html
+  container.innerHTML = sanitizedHtml
   container.style.position = 'absolute'
   container.style.left = '-9999px'
   container.style.top = '-9999px'
