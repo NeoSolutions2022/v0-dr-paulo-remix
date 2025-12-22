@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
+import { sanitizeText } from "@/lib/pdf-generator"
 
 interface PDFPremiumPayload {
   cleanText: string
@@ -33,14 +34,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "cleanText é obrigatório" }, { status: 400 })
     }
 
+    const normalizedCleanText = sanitizeText(cleanText)
+
     const documentContent = JSON.stringify({
-      cleanText,
+      cleanText: normalizedCleanText,
       customFields,
       timestamp: new Date().toISOString(),
     })
     const documentHash = crypto.createHash("sha256").update(documentContent).digest("hex").substring(0, 16)
 
-    const variables = extractAllVariables(cleanText, patientName, doctorName, customFields)
+    const variables = extractAllVariables(normalizedCleanText, patientName, doctorName, customFields)
     const htmlContent = generatePremiumPDFHTML(variables, documentHash)
 
     return NextResponse.json(
@@ -63,11 +66,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-interface PDFVariables {
+export interface PDFVariables {
   [key: string]: string
 }
 
-function extractAllVariables(
+export function extractAllVariables(
   cleanText: string,
   patientName: string,
   doctorName: string,
@@ -342,7 +345,7 @@ function extractAllVariables(
   return { ...baseVariables, ...customFields }
 }
 
-function generatePremiumPDFHTML(variables: PDFVariables, documentHash: string): string {
+export function generatePremiumPDFHTML(variables: PDFVariables, documentHash: string): string {
   const escapeHtml = (text: string): string => {
     const map: Record<string, string> = {
       "&": "&amp;",

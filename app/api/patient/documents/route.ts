@@ -3,6 +3,16 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
+interface PatientDocument {
+  id: string
+  patient_id: string
+  file_name: string
+  created_at: string
+  pdf_url: string | null
+  clean_text: string | null
+  hash_sha256: string | null
+}
+
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
@@ -73,5 +83,5 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  return NextResponse.json({ documents: data })
+  return NextResponse.json({ documents: data as PatientDocument[] })
 }
