@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Relatório Médico (Client-side)</title>
+    <link rel="stylesheet" href="./report.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div class="panel">
+        <h3>Entrada (clean_text)</h3>
+        <textarea id="input"></textarea>
+        <div class="btns">
+          <button class="primary" id="btnRender">Gerar relatório</button>
+          <button id="btnPrint">Imprimir / Salvar PDF</button>
+        </div>
+        <p class="hint" style="color:#6b7280;font-size:12px;margin:10px 0 0;">
+          Dica: no navegador escolha "Salvar como PDF".
+        </p>
+      </div>
+
+      <div id="reportRoot"></div>
+    </div>
+
+    <script type="module">
+      import { renderReportFromCleanText, prepareForPrint } from './reportRenderer.js'
+
+      const input = document.getElementById('input')
+      const root = document.getElementById('reportRoot')
+
+      const stored = sessionStorage.getItem('patient-report-clean-text')
+      if (stored) {
+        input.value = stored
+      }
+
+      async function renderNow() {
+        await renderReportFromCleanText(input.value, root)
+      }
+
+      document.getElementById('btnRender').addEventListener('click', renderNow)
+
+      document.getElementById('btnPrint').addEventListener('click', async () => {
+        await prepareForPrint(root)
+        window.print()
+      })
+
+      renderNow()
+    </script>
+  </body>
+</html>
