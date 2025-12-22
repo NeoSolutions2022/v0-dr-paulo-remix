@@ -224,6 +224,36 @@ async function buildStyledPdfFromHtml(html: string, fileName: string): Promise<B
   }
 }
 
+function buildClientFallbackHtml(text: string, patientName: string) {
+  const safeText = sanitizeText(text) || 'Relatório indisponível'
+  const escaped = safeText
+    .split('\n')
+    .map((line) =>
+      line
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;'),
+    )
+    .join('<br />')
+
+  return `<!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>${patientName}</title>
+        <style>
+          body { font-family: 'Noto Sans', 'Helvetica', 'Arial', sans-serif; padding: 24px; line-height: 1.5; color: #0f172a; }
+          h1 { font-size: 20px; margin-bottom: 12px; color: #0f172a; }
+          .content { white-space: normal; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>Relatório do paciente</h1>
+        <div class="content">${escaped}</div>
+      </body>
+    </html>`
+}
+
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
   fileName: string
@@ -311,11 +341,19 @@ export function ProcessedDocumentViewer({
         cache: 'no-store',
       })
 
-      if (!response.ok) {
-        throw new Error('Não foi possível carregar o HTML estilizado do relatório.')
+      let html: string | null = null
+
+      if (response.ok) {
+        const payload = (await response.json()) as { html?: string }
+        html = payload?.html || null
+      } else {
+        console.warn('Endpoint styled-html retornou status não OK, usando fallback local', response.status)
       }
 
-      const { html } = (await response.json()) as { html: string }
+      if (!html) {
+        html = buildClientFallbackHtml(textSource, patientName || baseName)
+      }
+
       const blob = await buildStyledPdfFromHtml(html, baseName)
       const url = URL.createObjectURL(blob)
       setPdfUrl(url)
