@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from('patients')
     .select(
-      'id, full_name, email, birth_date, created_at, updated_at, documents(id, file_name, clean_text, created_at)',
+      'id, full_name, email, birth_date, created_at, documents(id, file_name, clean_text, created_at)',
     )
     .order('created_at', { ascending: false })
 

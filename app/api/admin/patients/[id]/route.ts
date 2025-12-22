@@ -17,7 +17,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     .from('patients')
     .update({ full_name, email, birth_date })
     .eq('id', params.id)
-    .select('id, full_name, email, birth_date, created_at, updated_at')
+    .select('id, full_name, email, birth_date, created_at')
     .single()
 
   if (error) {
