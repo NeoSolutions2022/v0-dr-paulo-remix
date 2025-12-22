@@ -277,6 +277,32 @@ function buildClientFallbackHtml(text: string, patientName: string) {
     </html>`
 }
 
+function sanitizeStyledHtml(html: string) {
+  const replacements: Array<[RegExp, string]> = [
+    [/lab\([^)]*\)/gi, '#0f172a'],
+    [/lch\([^)]*\)/gi, '#0f172a'],
+    [/color-mix\([^)]*\)/gi, '#0f172a'],
+    [/color\([^)]*\)/gi, '#0f172a'],
+    [/linear-gradient\([^)]*\)/gi, '#0f172a'],
+  ]
+
+  let sanitized = html
+  for (const [pattern, replacement] of replacements) {
+    sanitized = sanitized.replace(pattern, replacement)
+  }
+
+  // Remove any stray style attributes that still contain unsupported functions
+  sanitized = sanitized.replace(/style="[^"]*(lab\(|lch\(|color-mix\(|color\()[^"]*"/gi, (match) => {
+    let cleaned = match
+    for (const [pattern, replacement] of replacements) {
+      cleaned = cleaned.replace(pattern, replacement)
+    }
+    return cleaned
+  })
+
+  return sanitized
+}
+
 interface ProcessedDocumentViewerProps {
   cleanText?: string | null
   fileName: string
@@ -345,21 +371,7 @@ export function ProcessedDocumentViewer({
       setError(null)
       setIsStyled(false)
 
-      // 1) Tenta gerar PDF estilizado direto do servidor (puppeteer)
-      const styledPdfResponse = await fetch(`/api/patient/documents/${documentId}/pdf-styled`, {
-        cache: 'no-store',
-      })
-
-      if (styledPdfResponse.ok && styledPdfResponse.headers.get('content-type')?.includes('application/pdf')) {
-        const blob = await styledPdfResponse.blob()
-        const url = URL.createObjectURL(blob)
-        setPdfUrl(url)
-        setIsStyled(true)
-        onPdfReady?.(url)
-        return
-      }
-
-      // 2) Se o servidor falhar, tenta obter o HTML estilizado dedicado do documento
+      // 1) Tenta obter o HTML estilizado dedicado do documento e processar no cliente
       const response = await fetch(`/api/patient/documents/${documentId}/styled-html`, {
         cache: 'no-store',
       })
@@ -377,7 +389,8 @@ export function ProcessedDocumentViewer({
         html = buildClientFallbackHtml(textSource, patientName || baseName)
       }
 
-      const blob = await buildStyledPdfFromHtml(html, baseName)
+      const sanitizedHtml = sanitizeStyledHtml(html)
+      const blob = await buildStyledPdfFromHtml(sanitizedHtml, baseName)
       const url = URL.createObjectURL(blob)
       setPdfUrl(url)
       setIsStyled(true)
@@ -385,7 +398,7 @@ export function ProcessedDocumentViewer({
     } catch (styledError: any) {
       console.warn('Falha na geração estilizada, aplicando fallback textual', styledError)
       try {
-        // 3) Tenta usar a mesma pipeline da Home (/api/generate-pdf) para obter HTML estilizado
+        // 2) Tenta usar a mesma pipeline da Home (/api/generate-pdf) para obter HTML estilizado e processar localmente
         const premiumResponse = await fetch('/api/generate-pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -395,7 +408,8 @@ export function ProcessedDocumentViewer({
         if (premiumResponse.ok) {
           const { html } = (await premiumResponse.json()) as { html?: string }
           if (html) {
-            const blob = await buildStyledPdfFromHtml(html, baseName)
+            const sanitizedHtml = sanitizeStyledHtml(html)
+            const blob = await buildStyledPdfFromHtml(sanitizedHtml, baseName)
             const url = URL.createObjectURL(blob)
             setPdfUrl(url)
             setIsStyled(true)
