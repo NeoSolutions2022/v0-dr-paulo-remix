@@ -4,14 +4,23 @@ export interface ParsedPatient {
   missing: string[]
 }
 
-const dateRegex = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/g
-const dateRegexSingle = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/
-const fichaDateRegex = /Data\s*de\s*Nascimento[^0-9]*(\d{4}[\/-]\d{2}[\/-]\d{2}|\d{2}[\/-]\d{2}[\/-]\d{4}|\d{8})/i
+const dateSeparator = "[\\/\\-\\u2010-\\u2015\\u2212]"
+const dateRegex = new RegExp(
+  `(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+  "g",
+)
+const dateRegexSingle = new RegExp(
+  `(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+)
+const fichaDateRegex = new RegExp(
+  `Data\\s*de\\s*Nascimento[^0-9]*(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+  "i",
+)
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
-  const trimmed = raw.trim()
+  const trimmed = raw.trim().replace(/[\u2010-\u2015\u2212]/g, "-")
 
   // yyyy-mm-dd or yyyy/mm/dd
   const isoMatch = trimmed.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
