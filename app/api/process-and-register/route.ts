@@ -5,6 +5,11 @@ import { extractPatientData } from "@/lib/parsers/patient"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
+const DEFAULT_SUPABASE_URL = "https://fhznxprnzdswjzpesgal.supabase.co"
+const DEFAULT_SUPABASE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoem54cHJuemRzd2p6cGVzZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzU0NDcsImV4cCI6MjA4MTY1MTQ0N30.ggOs6IBd6yAsJhWsHj9boWkyaqWTi1s11wRMDWZrOQY"
+
 interface ProcessPayload {
   rawText: string
   sourceName?: string
@@ -89,6 +94,13 @@ export async function POST(request: Request) {
       )
     }
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
+    const supabaseAnonKey = DEFAULT_SUPABASE_KEY
+
+    const dataSupabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+
     let supabase
     try {
       supabase = createAdminClient()
@@ -102,16 +114,7 @@ export async function POST(request: Request) {
     const authUser = await getOrCreateAuthUser(supabase, loginEmail, password)
 
     if (debugLogin) {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://fhznxprnzdswjzpesgal.supabase.co"
-      const supabaseAnonKey =
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoem54cHJuemRzd2p6cGVzZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzU0NDcsImV4cCI6MjA4MTY1MTQ0N30.ggOs6IBd6yAsJhWsHj9boWkyaqWTi1s11wRMDWZrOQY"
-
-      const publicClient = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-
-      const { error: debugAuthError } = await publicClient.auth.signInWithPassword({
+      const { error: debugAuthError } = await dataSupabase.auth.signInWithPassword({
         email: loginEmail,
         password,
       })
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: existingPatient, error: existingPatientError } = await supabase
+    const { data: existingPatient, error: existingPatientError } = await dataSupabase
       .from("patients")
       .select("id, full_name, cpf, birth_date")
       .eq("full_name", parsed.fullName)
@@ -157,7 +160,7 @@ export async function POST(request: Request) {
       // Garante que o usuário do Auth está alinhado e com senha atualizada
       if (existingPatient.id !== authUser.id) {
         // Realinha o ID do paciente ao usuário de auth encontrado/criado
-        const { error: updatePatientIdError } = await supabase
+        const { error: updatePatientIdError } = await dataSupabase
           .from("patients")
           .update({ id: authUser.id })
           .eq("id", existingPatient.id)
@@ -170,7 +173,7 @@ export async function POST(request: Request) {
         }
 
         // Move documentos já existentes para o novo ID do paciente
-        const { error: updateDocsError } = await supabase
+        const { error: updateDocsError } = await dataSupabase
           .from("documents")
           .update({ patient_id: authUser.id })
           .eq("patient_id", existingPatient.id)
@@ -185,7 +188,7 @@ export async function POST(request: Request) {
 
       patientRecord = { ...existingPatient, id: authUser.id }
     } else {
-      const { error: patientError } = await supabase.from("patients").insert({
+      const { error: patientError } = await dataSupabase.from("patients").insert({
         id: authUser.id,
         full_name: parsed.fullName,
         cpf: null,
@@ -202,7 +205,7 @@ export async function POST(request: Request) {
     const documentName = sourceName || `${patientRecord.full_name || "paciente"}.txt`
     const hashSha256 = crypto.createHash("sha256").update(cleanText).digest("hex")
 
-    const { data: document, error: documentError } = await supabase
+    const { data: document, error: documentError } = await dataSupabase
       .from("documents")
       .insert({
         patient_id: authUser.id,

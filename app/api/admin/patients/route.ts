@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 import { hasValidAdminSession, ADMIN_SESSION_COOKIE } from '@/lib/admin-auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+
+const DEFAULT_SUPABASE_URL = 'https://fhznxprnzdswjzpesgal.supabase.co'
+const DEFAULT_SUPABASE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoem54cHJuemRzd2p6cGVzZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwNzU0NDcsImV4cCI6MjA4MTY1MTQ0N30.ggOs6IBd6yAsJhWsHj9boWkyaqWTi1s11wRMDWZrOQY'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +17,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  const supabase = createAdminClient()
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
+  const supabaseKey = DEFAULT_SUPABASE_KEY
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fhznxprnzdswjzpesgal.supabase.co'
+  const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
 
   const { data: patients, error: patientsError } = await supabase
     .from('patients')
