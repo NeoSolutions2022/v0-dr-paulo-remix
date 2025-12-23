@@ -6,9 +6,11 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 const DEFAULT_SUPABASE_URL = "https://fhznxprnzdswjzpesgal.supabase.co"
-const DEFAULT_SUPABASE_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5"
+const DEFAULT_SUPABASE_KEY = "sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5"
+const DEFAULT_SUPABASE_SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
+  DEFAULT_SUPABASE_KEY
 
 interface ProcessPayload {
   rawText: string
@@ -94,10 +96,10 @@ export async function POST(request: Request) {
       )
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
-    const supabaseAnonKey = DEFAULT_SUPABASE_KEY
+    const supabaseUrl = DEFAULT_SUPABASE_URL
+    const supabaseServiceKey = DEFAULT_SUPABASE_SERVICE_KEY
 
-    const dataSupabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+    const dataSupabase = createSupabaseClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
