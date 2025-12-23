@@ -5,6 +5,7 @@ export interface ParsedPatient {
 }
 
 const dateRegex = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/g
+const dateRegexSingle = /(\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{8})/
 const fichaDateRegex = /Data\s*de\s*Nascimento[^0-9]*(\d{4}[\/-]\d{2}[\/-]\d{2}|\d{2}[\/-]\d{2}[\/-]\d{4}|\d{8})/i
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
 
@@ -73,7 +74,7 @@ function findFirstBirthDate(text: string): string | undefined {
     if (normalized) return normalized
   }
 
-  const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1])
+  const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1] ?? m[0])
   for (const candidate of allCandidates) {
     const normalized = normalizeBirthDate(candidate)
     if (normalized) return normalized
@@ -96,7 +97,7 @@ function findBirthDateInLines(block: string): string | undefined {
   for (const line of lines) {
     if (!/nasc/i.test(line)) continue
 
-    const match = line.match(dateRegex)
+    const match = line.match(dateRegexSingle)
     if (match?.[1]) {
       const normalized = normalizeBirthDate(match[1])
       if (normalized) return normalized
@@ -105,7 +106,7 @@ function findBirthDateInLines(block: string): string | undefined {
 
   // Fallback: first valid date in header block
   for (const line of lines) {
-    const match = line.match(dateRegex)
+    const match = line.match(dateRegexSingle)
     if (match?.[1]) {
       const normalized = normalizeBirthDate(match[1])
       if (normalized) return normalized

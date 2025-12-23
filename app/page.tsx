@@ -1,698 +1,631 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { Download, Upload, FileText, Trash2, Copy, CheckCircle2, AlertCircle, Loader2, Zap, Eye } from "lucide-react"
-import { PdfPreviewModal } from "@/components/pdf-preview-modal"
-import { PdfEditorModal } from "@/components/pdf-editor-modal"
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clipboard,
+  FileText,
+  Loader2,
+  LogOut,
+  PenSquare,
+  RefreshCw,
+  Search,
+  Upload,
+  UserPlus,
+  Users,
+  ListChecks,
+} from "lucide-react"
 
-interface FileItem {
+interface PatientDocument {
   id: string
-  name: string
-  rawText: string
+  patient_id: string
+  file_name: string
+  created_at: string
+  clean_text: string | null
+  pdf_url?: string | null
+}
+
+interface Patient {
+  id: string
+  full_name: string
+  email: string | null
+  birth_date: string | null
+  created_at?: string
+  updated_at?: string
+  documents?: PatientDocument[]
+}
+
+interface UploadResult {
   cleanText: string
-  status: "idle" | "processing" | "done" | "error"
-  error?: string
   credentials?: {
     loginName?: string
     password?: string
     existing?: boolean
   }
-  missing?: string[]
   message?: string
+  patient?: Patient
+  document?: PatientDocument
 }
 
-interface PdfData {
-  cleanText: string
-  patientName?: string
-  doctorName?: string
-  html?: string
-}
-
-export default function Page() {
-  const [rawText, setRawText] = useState("")
-  const [cleanText, setCleanText] = useState("")
-  const [loading, setLoading] = useState(false)
+export default function AdminHomePage() {
+  const router = useRouter()
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+  const [loadingPatients, setLoadingPatients] = useState(true)
+  const [savingPatient, setSavingPatient] = useState(false)
+  const [savingDocument, setSavingDocument] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadFileName, setUploadFileName] = useState("")
+  const [uploadText, setUploadText] = useState("")
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState(false)
-  const [files, setFiles] = useState<FileItem[]>([])
-  const [copied, setCopied] = useState(false)
-  const [previewPdf, setPreviewPdf] = useState<PdfData | null>(null)
-  const [editingPdf, setEditingPdf] = useState<PdfData | null>(null)
-  const [analyzeLoadingId, setAnalyzeLoadingId] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState("")
+  const [checkingAuth, setCheckingAuth] = useState(true)
+  const uploadSectionId = "admin-upload-section"
 
-  const handleClean = async () => {
-    if (!rawText.trim()) {
-      setError("Por favor, insira texto para limpar")
-      return
+  const selectedPatient = useMemo(
+    () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
+    [patients, selectedPatientId],
+  )
+
+  const selectedDocument = useMemo(
+    () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
+    [selectedDocumentId, selectedPatient],
+  )
+
+  useEffect(() => {
+    const verifySession = async () => {
+      const response = await fetch("/api/admin/session")
+      if (!response.ok) {
+        router.push("/admin/login")
+        return
+      }
+
+      setCheckingAuth(false)
+      await loadPatients()
     }
 
-    setLoading(true)
+    verifySession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const scrollToUpload = () => {
+    const section = document.getElementById(uploadSectionId)
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }
+
+  const loadPatients = async () => {
+    setLoadingPatients(true)
     setError("")
-    setSuccess(false)
 
     try {
-      const response = await fetch("/api/clean", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText }),
-      })
-
+      const response = await fetch("/api/admin/patients")
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Falha ao limpar texto")
+        throw new Error(data.error || "Não foi possível carregar os pacientes")
       }
-
-      setCleanText(data.cleanText)
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ocorreu um erro desconhecido")
+      setPatients(data.patients || [])
+      setSelectedPatientId(data.patients?.[0]?.id ?? null)
+      setSelectedDocumentId(data.patients?.[0]?.documents?.[0]?.id ?? null)
+    } catch (err: any) {
+      setError(err.message || "Erro ao buscar pacientes")
     } finally {
-      setLoading(false)
+      setLoadingPatients(false)
     }
   }
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFiles = event.target.files
-    if (!uploadedFiles) return
-
-    for (let i = 0; i < uploadedFiles.length; i++) {
-      const file = uploadedFiles[i]
-      const text = await file.text()
-
-      const fileItem: FileItem = {
-        id: Date.now() + "-" + i,
-        name: file.name,
-        rawText: text,
-        cleanText: "",
-        status: "idle",
-      }
-
-      setFiles((prev) => [...prev, fileItem])
-      processFile(fileItem.id, text, file.name)
-    }
-  }
-
-  const processFile = async (fileId: string, rawText: string, sourceName: string) => {
-    setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "processing" } : f)))
+  const handlePatientUpdate = async (formData: Partial<Patient>) => {
+    if (!selectedPatient) return
+    setSavingPatient(true)
+    setSuccessMessage("")
+    setError("")
 
     try {
-      const response = await fetch("/api/process-and-register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText, sourceName }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao processar e registrar paciente")
-      }
-
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === fileId
-            ? {
-                ...f,
-                cleanText: data.cleanText,
-                status: "done",
-                credentials: data.credentials,
-                message: data.message,
-              }
-            : f,
-        ),
-      )
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Falha ao processar"
-      setFiles((prev) => prev.map((f) => (f.id === fileId ? { ...f, status: "error", error: errorMsg } : f)))
-    }
-  }
-
-  const downloadFile = (fileItem: FileItem) => {
-    const element = document.createElement("a")
-    const file = new Blob([fileItem.cleanText], { type: "text/plain;charset=utf-8" })
-    element.href = URL.createObjectURL(file)
-    element.download = fileItem.name.replace(/\.[^/.]+$/, "_limpo.txt")
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
-  }
-
-  const downloadAllFiles = () => {
-    files.forEach((file) => {
-      if (file.cleanText) {
-        setTimeout(() => downloadFile(file), 100)
-      }
-    })
-  }
-
-  const downloadAllAsPdf = async () => {
-    const filesToDownload = files.filter((f) => f.cleanText)
-
-    if (filesToDownload.length === 0) {
-      setError("Nenhum arquivo processado para baixar")
-      setTimeout(() => setError(""), 3000)
-      return
-    }
-
-    for (let i = 0; i < filesToDownload.length; i++) {
-      const file = filesToDownload[i]
-      try {
-        const response = await fetch("/api/generate-pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            cleanText: file.cleanText,
-            patientName: file.name.replace(/\.[^/.]+$/, ""),
-          }),
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || "Erro ao gerar PDF")
-        }
-
-        // Download PDF
-        const pdfBlob = await fetch(`data:text/html;charset=utf-8,${encodeURIComponent(data.html)}`)
-        const element = document.createElement("a")
-        element.href = URL.createObjectURL(new Blob([data.html], { type: "text/html" }))
-        element.download = file.name.replace(/\.[^/.]+$/, "_limpo.pdf")
-        document.body.appendChild(element)
-        element.click()
-        document.body.removeChild(element)
-
-        // Delay between downloads
-        if (i < filesToDownload.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500))
-        }
-      } catch (error) {
-        console.error(`Erro ao gerar PDF para ${file.name}:`, error)
-      }
-    }
-
-    setSuccess(true)
-    setTimeout(() => setSuccess(false), 3000)
-  }
-
-  const downloadSingleClean = () => {
-    if (cleanText) {
-      const element = document.createElement("a")
-      const file = new Blob([cleanText], { type: "text/plain;charset=utf-8" })
-      element.href = URL.createObjectURL(file)
-      element.download = "texto_limpo.txt"
-      document.body.appendChild(element)
-      element.click()
-      document.body.removeChild(element)
-    }
-  }
-
-  const removeFile = (fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId))
-  }
-
-  const clearAll = () => {
-    setFiles([])
-  }
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(cleanText)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const downloadAsZip = async () => {
-    const filesToDownload = files.filter((f) => f.cleanText)
-
-    if (filesToDownload.length === 0) {
-      setError("Nenhum arquivo processado para baixar")
-      setTimeout(() => setError(""), 3000)
-      return
-    }
-
-    try {
-      filesToDownload.forEach((file, index) => {
-        setTimeout(() => {
-          downloadFile(file)
-        }, index * 200)
-      })
-
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (error) {
-      console.error("Erro ao baixar arquivos:", error)
-      setError("Erro ao baixar arquivos. Tente novamente.")
-      setTimeout(() => setError(""), 3000)
-    }
-  }
-
-  const previewPdfModal = async (cleanText: string, fileName: string) => {
-    try {
-      const response = await fetch("/api/generate-pdf", {
-        method: "POST",
+      const response = await fetch(`/api/admin/patients/${selectedPatient.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cleanText,
-          patientName: fileName.replace(/\.[^/.]+$/, ""),
+          full_name: formData.full_name ?? selectedPatient.full_name,
+          email: formData.email ?? selectedPatient.email,
+          birth_date: formData.birth_date ?? selectedPatient.birth_date,
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Erro ao gerar PDF")
+        throw new Error(data.error || "Falha ao atualizar paciente")
       }
-
-      setPreviewPdf({
-        cleanText,
-        patientName: fileName.replace(/\.[^/.]+$/, ""),
-        html: data.html,
-      })
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error)
-      setError(error instanceof Error ? error.message : "Erro ao gerar PDF")
-      setTimeout(() => setError(""), 3000)
+      setPatients((prev) =>
+        prev.map((patient) => (patient.id === selectedPatient.id ? { ...patient, ...data.patient } : patient)),
+      )
+      setSuccessMessage("Dados do paciente atualizados com sucesso")
+    } catch (err: any) {
+      setError(err.message || "Erro ao salvar paciente")
+    } finally {
+      setSavingPatient(false)
     }
   }
 
-  const editPdfModal = async (cleanText: string, fileName: string) => {
-    setEditingPdf({
-      cleanText,
-      patientName: fileName.replace(/\.[^/.]+$/, ""),
-    })
-  }
+  const handleDocumentUpdate = async (changes: Partial<PatientDocument>) => {
+    if (!selectedDocument) return
+    setSavingDocument(true)
+    setSuccessMessage("")
+    setError("")
 
-  const downloadCleanTxt = (fileItem: FileItem) => {
-    const element = document.createElement("a")
-    const file = new Blob([fileItem.cleanText], { type: "text/plain;charset=utf-8" })
-    element.href = URL.createObjectURL(file)
-    element.download = fileItem.name.replace(/\.[^/.]+$/, "_limpo.txt")
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
-  }
-
-  const analyzeAndDownloadCommented = async (fileItem: FileItem) => {
-    setAnalyzeLoadingId(fileItem.id)
     try {
-      const response = await fetch("/api/ai-analyze-clean", {
-        method: "POST",
+      const response = await fetch(`/api/admin/documents/${selectedDocument.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cleanText: fileItem.cleanText }),
+        body: JSON.stringify({
+          file_name: changes.file_name ?? selectedDocument.file_name,
+          clean_text: changes.clean_text ?? selectedDocument.clean_text,
+        }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Falha na análise IA")
+        throw new Error(data.error || "Falha ao atualizar documento")
       }
-
-      const element = document.createElement("a")
-      const file = new Blob([data.commentedText], { type: "text/plain;charset=utf-8" })
-      element.href = URL.createObjectURL(file)
-      element.download = fileItem.name.replace(/\.[^/.]+$/, "_comentado.txt")
-      document.body.appendChild(element)
-      element.click()
-      document.body.removeChild(element)
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Falha na análise IA"
-      alert(errorMsg)
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient?.id
+            ? {
+                ...patient,
+                documents: patient.documents?.map((doc) => (doc.id === selectedDocument.id ? data.document : doc)),
+              }
+            : patient,
+        ),
+      )
+      setSuccessMessage("Relatório atualizado com sucesso")
+    } catch (err: any) {
+      setError(err.message || "Erro ao salvar documento")
     } finally {
-      setAnalyzeLoadingId(null)
+      setSavingDocument(false)
     }
   }
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const text = await file.text()
+    setUploadFileName(file.name)
+    setUploadText(text)
+    setUploadResult(null)
+  }
+
+  const handleProcessUpload = async () => {
+    if (!uploadText.trim()) {
+      setError("Envie um arquivo .txt com o relatório do paciente")
+      return
+    }
+
+    setUploading(true)
+    setError("")
+    setSuccessMessage("")
+
+    try {
+      const response = await fetch("/api/process-and-register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: uploadText, sourceName: uploadFileName || "relatorio.txt" }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao processar relatório")
+      }
+
+      setUploadResult(data)
+      setSuccessMessage("Relatório processado e login criado com sucesso")
+      await loadPatients()
+    } catch (err: any) {
+      setError(err.message || "Erro ao processar arquivo")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const filteredPatients = useMemo(() => {
+    if (!search.trim()) return patients
+    return patients.filter((patient) =>
+      patient.full_name.toLowerCase().includes(search.trim().toLowerCase()),
+    )
+  }, [patients, search])
+
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" })
+    router.push("/admin/login")
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+      </div>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-blue-950 dark:to-indigo-950">
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12">
-        <div className="mb-12 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="relative w-14 h-14">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl blur-lg opacity-50"></div>
-              <div className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-                <Zap className="w-7 h-7 text-white" />
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-8">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Painel administrativo</p>
+              <h1 className="text-3xl font-bold flex items-center gap-2">
+                <Users className="h-6 w-6 text-blue-600" /> Doutor Paulo
+              </h1>
             </div>
-            <h1 className="text-5xl md:text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600">
-              Conversor Clínico
-            </h1>
-          </div>
-          <p className="text-lg text-slate-600 dark:text-slate-300 max-w-3xl mx-auto font-medium">
-            Transforme textos clínicos com artefatos RTF e dumps SQL em documentos limpos e estruturados
-          </p>
-          <div className="flex justify-center gap-4 mt-6">
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <CheckCircle2 className="w-4 h-4 text-green-500" />
-              Preserva 100% dos dados médicos
-            </div>
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-              <Zap className="w-4 h-4 text-yellow-500" />
-              Processamento instantâneo
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2 mb-8">
-          <Card className="border-0 shadow-xl hover:shadow-2xl transition-shadow duration-300 bg-white dark:bg-slate-900/50 backdrop-blur">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-slate-200 dark:border-slate-800">
-              <CardTitle className="text-xl text-blue-900 dark:text-blue-100">Texto Original</CardTitle>
-              <CardDescription className="text-slate-600 dark:text-slate-400">
-                Cole seu texto clínico bruto com artefatos RTF e SQL
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              <Textarea
-                placeholder="Cole aqui o texto clínico bruto com artefatos RTF e dumps SQL..."
-                value={rawText}
-                onChange={(e) => setRawText(e.target.value)}
-                className="min-h-72 font-mono text-sm resize-none bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
-              />
-              <Button
-                onClick={handleClean}
-                disabled={loading || !rawText.trim()}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 h-auto shadow-lg hover:shadow-xl transition-all"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="mr-2 h-4 w-4" />
-                    Limpar Texto
-                  </>
-                )}
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={scrollToUpload}>
+                <Upload className="mr-2 h-4 w-4" /> Novo relatório
               </Button>
-              {error && (
-                <div className="rounded-lg bg-red-50 dark:bg-red-950/20 p-4 text-sm text-red-700 dark:text-red-300 flex items-start gap-3 border border-red-200 dark:border-red-900/30">
-                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
+              <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
+                {loadingPatients ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando
+                  </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Atualizar lista
+                </>
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-xl hover:shadow-2xl transition-shadow duration-300 bg-white dark:bg-slate-900/50 backdrop-blur">
-            <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-b border-slate-200 dark:border-slate-800">
-              <CardTitle className="text-xl text-green-900 dark:text-green-100">Texto Limpo</CardTitle>
-              <CardDescription className="text-slate-600 dark:text-slate-400">
-                Resultado processado e estruturado
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              <Textarea
-                value={cleanText}
-                readOnly
-                className="min-h-72 font-mono text-sm resize-none bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
-                placeholder="O texto limpo e estruturado aparecerá aqui..."
-              />
-              <div className="flex gap-2">
-                <Button
-                  onClick={copyToClipboard}
-                  disabled={!cleanText}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-semibold transition-all"
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  {copied ? "Copiado!" : "Copiar"}
-                </Button>
-                <Button
-                  onClick={downloadSingleClean}
-                  disabled={!cleanText}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-semibold transition-all"
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
-              </div>
-              {success && (
-                <div className="rounded-lg bg-green-50 dark:bg-green-950/20 p-4 text-sm text-green-700 dark:text-green-300 flex items-center gap-3 border border-green-200 dark:border-green-900/30">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Texto limpo e estruturado com sucesso!</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </Button>
+            <Button variant="secondary" onClick={handleLogout}>
+              <LogOut className="mr-2 h-4 w-4" /> Sair
+            </Button>
+          </div>
         </div>
 
-        <Card className="border-0 shadow-xl bg-white dark:bg-slate-900/50 backdrop-blur mb-8">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-b border-slate-200 dark:border-slate-800">
-            <CardTitle className="text-xl text-purple-900 dark:text-purple-100">Processamento em Massa</CardTitle>
-            <CardDescription className="text-slate-600 dark:text-slate-400">
-              Carregue múltiplos arquivos para processamento automático
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 pt-6">
-            <label className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700 p-12 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/20 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-300 group">
-              <div className="text-center">
-                <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                </div>
-                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Clique para carregar arquivos</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">ou arraste e solte aqui</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Formatos: .txt, .rtf</p>
-              </div>
-              <input type="file" multiple accept=".txt,.rtf" onChange={handleFileUpload} className="hidden" />
-            </label>
+        {(error || successMessage) && (
+          <Alert variant={error ? "destructive" : "default"}>
+            {error ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+            <AlertDescription>{error || successMessage}</AlertDescription>
+          </Alert>
+        )}
 
-            {files.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center flex-wrap gap-2">
-                  <div className="text-sm font-bold">
-                    <span className="text-slate-900 dark:text-slate-100">{files.length} arquivo(s) carregado(s)</span>
-                    <span className="ml-3 text-slate-500 dark:text-slate-400 font-normal">
-                      {files.filter((f) => f.status === "done").length} concluído(s)
-                    </span>
-                  </div>
-                  {files.length > 0 && (
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        onClick={downloadAsZip}
-                        disabled={!files.some((f) => f.cleanText)}
-                        className="bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-all"
-                        size="sm"
-                      >
-                        <Download className="mr-2 h-3 w-3" />
-                        Baixar Todos (TXT)
-                      </Button>
-                      <Button
-                        onClick={downloadAllAsPdf}
-                        disabled={!files.some((f) => f.cleanText)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all"
-                        size="sm"
-                      >
-                        <Download className="mr-2 h-3 w-3" />
-                        Baixar Todos (PDF)
-                      </Button>
-                      <Button
-                        onClick={clearAll}
-                        className="bg-red-600 hover:bg-red-700 text-white font-semibold transition-all"
-                        size="sm"
-                      >
-                        <Trash2 className="mr-2 h-3 w-3" />
-                        Limpar Lista
-                      </Button>
+        <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
+          <Card className="shadow-sm">
+            <CardHeader className="space-y-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl">Pacientes</CardTitle>
+                <Badge variant="secondary">{patients.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar paciente"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[540px]">
+                <div className="divide-y">
+                  {loadingPatients && (
+                    <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Carregando pacientes...
                     </div>
                   )}
-                </div>
 
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {files.map((file) => (
-                    <div
-                      key={file.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                  {!loadingPatients && filteredPatients.length === 0 && (
+                    <div className="p-4 text-sm text-muted-foreground">Nenhum paciente encontrado</div>
+                  )}
+
+                  {filteredPatients.map((patient) => (
+                    <button
+                      key={patient.id}
+                      className={`w-full p-4 text-left transition hover:bg-slate-50 ${
+                        patient.id === selectedPatient?.id ? "bg-blue-50" : ""
+                      }`}
+                      onClick={() => {
+                        setSelectedPatientId(patient.id)
+                        setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
+                      }}
                     >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                            {file.status === "processing" && (
-                              <span className="flex items-center gap-1">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Processando...
-                              </span>
-                            )}
-                            {file.status === "done" && (
-                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Concluído ({file.cleanText.length} caracteres)
-                              </span>
-                            )}
-                            {file.status === "error" && (
-                              <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                                <AlertCircle className="h-3 w-3" />
-                                {file.error}
-                              </span>
-                            )}
-                            {file.status === "idle" && "Aguardando processamento..."}
-                          </p>
-                            {file.status === "done" && file.credentials && (
-                            <div className="mt-2 text-xs text-slate-700 dark:text-slate-300 space-y-1">
-                              <div className="font-semibold">Credenciais geradas</div>
-                              <div className="rounded-md bg-slate-100 dark:bg-slate-800/60 p-2 border border-slate-200 dark:border-slate-700">
-                                {file.credentials.loginName && (
-                                  <div>Login (nome completo): <span className="font-mono">{file.credentials.loginName}</span></div>
-                                )}
-                                <div>Senha inicial: <span className="font-mono">{file.credentials.password}</span></div>
-                                <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                                  Solicite troca de senha no primeiro acesso.
-                                </div>
-                                {file.message && (
-                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                                    {file.message}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                      <p className="font-semibold text-slate-900">{patient.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                        <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
                       </div>
-                      <div className="flex gap-1 ml-2 flex-wrap">
-                        {file.status === "done" && (
-                          <>
-                            <Button
-                              onClick={() => previewPdfModal(file.cleanText, file.name)}
-                              size="sm"
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                              title="Visualizar PDF"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              onClick={() => editPdfModal(file.cleanText, file.name)}
-                              size="sm"
-                              className="bg-orange-600 hover:bg-orange-700 text-white"
-                              title="Editar PDF"
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              onClick={() => downloadFile(file)}
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              title="Baixar arquivo TXT Limpo"
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              onClick={() => analyzeAndDownloadCommented(file)}
-                              size="sm"
-                              className={`bg-teal-600 hover:bg-teal-700 text-white ${analyzeLoadingId === file.id ? "opacity-50 pointer-events-none" : ""}`}
-                              title="Analisar com IA e Baixar TXT Comentado"
-                            >
-                              {analyzeLoadingId === file.id ? (
-                                <>
-                                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                  Analisando...
-                                </>
-                              ) : (
-                                <>
-                                  <Zap className="mr-2 h-4 w-4" />
-                                  Analisar e Baixar TXT Comentado
-                                </>
-                              )}
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          onClick={() => removeFile(file.id)}
-                          size="sm"
-                          className="bg-red-600 hover:bg-red-700 text-white"
-                          title="Remover"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2 text-blue-900 dark:text-blue-100">
-                <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Processamento Realizado
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">✓</span>
-                  Decodifica escapes RTF (\'e7 → ç, \'c7 → Ç)
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">✓</span>
-                  Remove comandos e estruturas RTF
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">✓</span>
-                  Elimina artefatos de dump SQL
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">✓</span>
-                  Normaliza espaçamento e quebras
-                </li>
-              </ul>
+              </ScrollArea>
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2 text-green-900 dark:text-green-100">
-                <Zap className="h-5 w-5 text-green-600 dark:text-green-400" />
-                Preservação de Dados
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
-                  Mantém 100% das informações clínicas
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
-                  Estrutura dados por seção clínica
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
-                  Remove apenas lixo RTF e SQL
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-green-600 dark:text-green-400 font-bold">✓</span>
-                  Preserva datas, valores e anotações
-                </li>
-              </ul>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <PenSquare className="h-5 w-5 text-blue-600" /> Dados do paciente
+                </CardTitle>
+                <CardDescription>Edite informações básicas e salve em tempo real</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name">Nome completo</Label>
+                    <Input
+                      id="full_name"
+                      value={selectedPatient?.full_name || ""}
+                      onChange={(event) =>
+                        setPatients((prev) =>
+                          prev.map((patient) =>
+                            patient.id === selectedPatient?.id
+                              ? { ...patient, full_name: event.target.value }
+                              : patient,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={selectedPatient?.email || ""}
+                      onChange={(event) =>
+                        setPatients((prev) =>
+                          prev.map((patient) =>
+                            patient.id === selectedPatient?.id
+                              ? { ...patient, email: event.target.value }
+                              : patient,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="birth_date">Data de nascimento</Label>
+                    <Input
+                      id="birth_date"
+                      type="date"
+                      value={selectedPatient?.birth_date || ""}
+                      onChange={(event) =>
+                        setPatients((prev) =>
+                          prev.map((patient) =>
+                            patient.id === selectedPatient?.id
+                              ? { ...patient, birth_date: event.target.value }
+                              : patient,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">Criado: {selectedPatient?.created_at?.slice(0, 10) || "-"}</Badge>
+                  <Badge variant="outline">Atualizado: {selectedPatient?.updated_at?.slice(0, 10) || "-"}</Badge>
+                </div>
+
+                <Button
+                  className="w-full md:w-auto"
+                  onClick={() => handlePatientUpdate(selectedPatient || {})}
+                  disabled={savingPatient || !selectedPatient}
+                >
+                  {savingPatient ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <FileText className="h-5 w-5 text-blue-600" /> Relatórios do paciente
+                </CardTitle>
+                <CardDescription>Visualize e ajuste o texto limpo enviado ao paciente</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {selectedPatient?.documents?.map((doc) => (
+                    <Badge
+                      key={doc.id}
+                      variant={doc.id === selectedDocument?.id ? "default" : "secondary"}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedDocumentId(doc.id)}
+                    >
+                      {doc.file_name}
+                    </Badge>
+                  ))}
+                </div>
+
+                {selectedDocument ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Título do arquivo</Label>
+                      <Input
+                        value={selectedDocument.file_name}
+                        onChange={(event) =>
+                          setPatients((prev) =>
+                            prev.map((patient) =>
+                              patient.id === selectedPatient?.id
+                                ? {
+                                    ...patient,
+                                    documents: patient.documents?.map((doc) =>
+                                      doc.id === selectedDocument.id
+                                        ? { ...doc, file_name: event.target.value }
+                                        : doc,
+                                    ),
+                                  }
+                                : patient,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Texto limpo</Label>
+                      <Textarea
+                        className="h-64"
+                        value={selectedDocument.clean_text || ""}
+                        onChange={(event) =>
+                          setPatients((prev) =>
+                            prev.map((patient) =>
+                              patient.id === selectedPatient?.id
+                                ? {
+                                    ...patient,
+                                    documents: patient.documents?.map((doc) =>
+                                      doc.id === selectedDocument.id
+                                        ? { ...doc, clean_text: event.target.value }
+                                        : doc,
+                                    ),
+                                  }
+                                : patient,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline">Criado em {selectedDocument.created_at.slice(0, 10)}</Badge>
+                      <Badge variant="outline">PDF {selectedDocument.pdf_url ? "gerado" : "pendente"}</Badge>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => handleDocumentUpdate(selectedDocument)}
+                        disabled={savingDocument}
+                        className="w-full md:w-auto"
+                      >
+                        {savingDocument ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar texto
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          if (selectedDocument.clean_text) {
+                            navigator.clipboard.writeText(selectedDocument.clean_text)
+                            setSuccessMessage("Relatório copiado para a área de transferência")
+                          }
+                        }}
+                        className="w-full md:w-auto"
+                      >
+                        <Clipboard className="mr-2 h-4 w-4" /> Copiar texto
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Selecione um relatório para visualizar</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm" id={uploadSectionId}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Upload className="h-5 w-5 text-blue-600" /> Novo paciente por relatório .txt
+                </CardTitle>
+                <CardDescription>
+                  Faça upload de um texto clínico para limpar, registrar e criar as credenciais do paciente
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-[1fr,180px]">
+                  <div className="space-y-2">
+                    <Label htmlFor="txt">Cole ou revise o relatório</Label>
+                    <Textarea
+                      id="txt"
+                      className="h-48"
+                      value={uploadText}
+                      onChange={(event) => setUploadText(event.target.value)}
+                      placeholder="Cole aqui o conteúdo do relatório..."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="file">Ou envie um arquivo .txt</Label>
+                    <Input id="file" type="file" accept=".txt" onChange={handleFileUpload} />
+                    {uploadFileName && (
+                      <p className="text-xs text-muted-foreground">Arquivo selecionado: {uploadFileName}</p>
+                    )}
+                  </div>
+                </div>
+
+                <Button onClick={handleProcessUpload} disabled={uploading} className="w-full md:w-auto">
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="mr-2 h-4 w-4" /> Processar e criar login
+                    </>
+                  )}
+                </Button>
+
+                {uploadResult?.cleanText && (
+                  <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" /> Limpeza e cadastro concluídos
+                    </div>
+                    {uploadResult.credentials && (
+                      <div className="rounded-md bg-white p-3 text-sm shadow-sm">
+                        <p className="font-semibold">Credenciais do paciente</p>
+                        <p>Login: {uploadResult.credentials.loginName}</p>
+                        <p>Senha: {uploadResult.credentials.password}</p>
+                        {uploadResult.credentials.existing && (
+                          <p className="text-xs text-muted-foreground">
+                            Paciente já existia, credenciais confirmadas
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {uploadResult.message && (
+                      <p className="text-sm text-muted-foreground">{uploadResult.message}</p>
+                    )}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <ListChecks className="h-4 w-4 text-blue-600" /> Texto limpo
+                      </div>
+                      <Textarea value={uploadResult.cleanText} className="h-40" readOnly />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-
-      {previewPdf && (
-        <PdfPreviewModal
-          pdfData={previewPdf}
-          onClose={() => setPreviewPdf(null)}
-          onEdit={() => {
-            setPreviewPdf(null)
-            editPdfModal(previewPdf.cleanText, previewPdf.patientName || "Paciente")
-          }}
-        />
-      )}
-
-      {editingPdf && <PdfEditorModal pdfData={editingPdf} onClose={() => setEditingPdf(null)} />}
-    </main>
+    </div>
   )
 }
