@@ -240,7 +240,18 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[v0] Erro ao processar e registrar paciente:", error)
     const message = error instanceof Error ? error.message : "Falha ao processar e registrar paciente"
+    const isPermissionIssue =
+      message.toLowerCase().includes("not allowed") || message.toLowerCase().includes("permission")
+
     // Retorna detalhes mínimos para diagnóstico pelo usuário
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: message,
+        suggestion: isPermissionIssue
+          ? "Garanta que SUPABASE_SERVICE_ROLE_KEY (service_role) esteja configurada para permitir operações administrativas"
+          : undefined,
+      },
+      { status: 500 },
+    )
   }
 }

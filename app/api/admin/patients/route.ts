@@ -14,15 +14,21 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient()
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fhznxprnzdswjzpesgal.supabase.co'
+
   const { data: patients, error: patientsError } = await supabase
     .from('patients')
-    .select('id, full_name, email, birth_date, created_at')
+    .select('*')
     .order('created_at', { ascending: false })
 
   if (patientsError) {
     console.error('[admin] Erro ao carregar pacientes', patientsError)
     return NextResponse.json(
-      { error: 'Falha ao carregar pacientes', details: patientsError.message },
+      {
+        error: 'Falha ao carregar pacientes',
+        details: patientsError.message,
+        supabaseUrl,
+      },
       { status: 500 },
     )
   }
@@ -57,5 +63,5 @@ export async function GET(request: NextRequest) {
     documents: documents.filter((doc) => doc.patient_id === patient.id),
   }))
 
-  return NextResponse.json({ patients: patientsWithDocuments })
+  return NextResponse.json({ patients: patientsWithDocuments, supabaseUrl })
 }
