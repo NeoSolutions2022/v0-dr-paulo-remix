@@ -27,6 +27,7 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
   const structured = useMemo(() => parseCleanTextToStructured(normalizedText), [normalizedText])
   const query = search.trim()
   const evolutions = structured.evolutions
+  const patientName = structured.patient.nome && structured.patient.nome !== "-" ? structured.patient.nome : "Paciente"
 
   const filteredEvolutions = useMemo(() => {
     if (!query) return evolutions
@@ -46,6 +47,19 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
     window.setTimeout(() => setCopiedId(null), 2000)
   }
 
+  const calculateAge = (dateString: string) => {
+    const parsed = new Date(dateString)
+    if (Number.isNaN(parsed.getTime())) return null
+    const diff = Date.now() - parsed.getTime()
+    const age = new Date(diff).getUTCFullYear() - 1970
+    return age >= 0 ? age : null
+  }
+
+  const age =
+    structured.patient.data_nascimento && structured.patient.data_nascimento !== "-"
+      ? calculateAge(structured.patient.data_nascimento)
+      : null
+
   if (!cleanText.trim()) {
     return (
       <Card className="border-dashed">
@@ -61,31 +75,32 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase text-muted-foreground">Relatório do paciente</p>
+          <h3 className="text-xl font-semibold text-slate-900">{patientName}</h3>
+        </div>
+        <Badge variant="secondary">Código: {structured.patient.codigo || "-"}</Badge>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Ficha do Paciente</CardTitle>
         </CardHeader>
         <CardContent>
-          {structured.patient.codigo ||
-          structured.patient.nome ||
-          structured.patient.data_nascimento ||
-          structured.patient.telefone ? (
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { label: "Código", value: structured.patient.codigo },
-                { label: "Nome", value: structured.patient.nome },
-                { label: "Data de Nascimento", value: structured.patient.data_nascimento },
-                { label: "Telefone", value: structured.patient.telefone },
+                { label: "Código", value: structured.patient.codigo || "-" },
+                { label: "Data Nasc.", value: structured.patient.data_nascimento || "-" },
+                { label: "Telefone", value: structured.patient.telefone || "-" },
+                { label: "Idade", value: age !== null ? `${age} anos` : "-" },
               ].map((field) => (
-                <div key={field.label} className="rounded-md border bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">{field.label}</p>
-                  <p className="text-sm font-medium text-slate-900">{field.value || "-"}</p>
+                <div key={field.label} className="rounded-md border bg-white px-3 py-2 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase text-muted-foreground">{field.label}</p>
+                  <p className="text-sm font-semibold text-slate-900">{field.value}</p>
                 </div>
               ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Nenhuma ficha encontrada no texto.</p>
-          )}
+          </div>
         </CardContent>
       </Card>
 
@@ -93,7 +108,18 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
         <CardHeader className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>Evoluções ({evolutions.length})</CardTitle>
-            <Badge variant="secondary">{evolutions.length}</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">{evolutions.length}</Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleCopy(normalizedText, "clean-text")}
+              >
+                <Clipboard className="h-4 w-4" />
+                {copiedId === "clean-text" ? "Texto copiado" : "Copiar texto limpo"}
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-muted-foreground" />
@@ -152,7 +178,7 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
                         }}
                       >
                         <Clipboard className="h-4 w-4" />
-                        {copiedId === evolution.timestamp ? "Copiado!" : "Copiar texto limpo"}
+                        {copiedId === evolution.timestamp ? "Copiado!" : "Copiar evolução"}
                       </Button>
                     </summary>
                     <div className="space-y-4 border-t px-4 py-3">
@@ -186,9 +212,9 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
 
                       <details className="rounded-md border bg-slate-50 p-3">
                         <summary className="cursor-pointer text-xs font-semibold uppercase text-slate-500">
-                          Texto completo
+                          Ver texto completo
                         </summary>
-                        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap text-sm text-slate-700">
                           {highlightText(evolution.texto_completo, query).map((part, index) =>
                             query && part.toLowerCase() === query.toLowerCase() ? (
                               <mark key={`${evolution.timestamp}-match-${index}`} className="rounded bg-yellow-200 px-1">
@@ -198,7 +224,7 @@ export default function CleanTextViewer({ cleanText }: CleanTextViewerProps) {
                               <span key={`${evolution.timestamp}-text-${index}`}>{part}</span>
                             ),
                           )}
-                        </p>
+                        </pre>
                       </details>
                     </div>
                   </details>

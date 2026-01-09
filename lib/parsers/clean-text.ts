@@ -23,7 +23,9 @@ export interface CleanTextStructured {
   evolutions: EvolutionStructured[]
 }
 
-const EVOLUTION_HEADER = /---\s*Evolução em\s*([\d-]+\s[\d:]+)\s*---/gi
+const EVOLUTION_HEADER = /---\s*Evolução\s*em\s*([0-9-]{10}\s+[0-9:]{8})\s*---/gi
+const IPSS_ITEM_REGEX = /(\d+)\s*[-–]\s*([^>]+?)\s*>\s*([0-9]+(?:\s*-\s*[0-9]+)?)/g
+const QUALIDADE_VIDA_REGEX = /QUALIDADE DE VIDA\s*-\s*(.*)$/i
 
 const decodeHex = (hex: string) => {
   const value = parseInt(hex, 16)
@@ -44,6 +46,22 @@ const stripRtfCommands = (text: string) =>
 const cleanWhitespace = (text: string) =>
   text.replace(/'a8/g, "").replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim()
 
+const safeSlice = (value: string | undefined, maxLength: number) => {
+  if (!value) return "-"
+  const trimmed = value.trim()
+  if (!trimmed) return "-"
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed
+}
+
+const createHash = (value: string) => {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i)
+    hash |= 0
+  }
+  return hash.toString(36)
+}
+
 export const normalizeCleanText = (cleanText: string) => {
   const normalized = normalizeLineBreaks(cleanText)
   const processed = normalized.includes("{\\rtf1") ? stripRtfCommands(normalized) : normalized
@@ -51,11 +69,19 @@ export const normalizeCleanText = (cleanText: string) => {
 }
 
 export const parseCleanTextToStructured = (plainText: string): CleanTextStructured => {
+  const codigo = safeSlice(plainText.match(/Código:\s*([0-9]+)/i)?.[1], 20)
+  const nome = safeSlice(plainText.match(/Nome:\s*(.*?)\s*Data de Nascimento:/i)?.[1], 120)
+  const dataNascimento = safeSlice(
+    plainText.match(/Data de Nascimento:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i)?.[1],
+    20,
+  )
+  const telefone = safeSlice(plainText.match(/Telefone:\s*([0-9]+)/i)?.[1], 30)
+
   const patient = {
-    codigo: plainText.match(/Código:\s*([^\n]+)/i)?.[1]?.trim(),
-    nome: plainText.match(/Nome:\s*([^\n]+)/i)?.[1]?.trim(),
-    data_nascimento: plainText.match(/Data de Nascimento:\s*([^\n]+)/i)?.[1]?.trim(),
-    telefone: plainText.match(/Telefone:\s*([^\n]+)/i)?.[1]?.trim(),
+    codigo,
+    nome,
+    data_nascimento: dataNascimento,
+    telefone,
   }
 
   const matches = Array.from(plainText.matchAll(EVOLUTION_HEADER))
@@ -69,7 +95,7 @@ export const parseCleanTextToStructured = (plainText: string): CleanTextStructur
 
   const deduped = new Map<string, EvolutionStructured>()
   evolutionsRaw.forEach((evolution) => {
-    const key = `${evolution.timestamp}__${evolution.body}`
+    const key = `${evolution.timestamp}__${createHash(evolution.body)}`
     if (!deduped.has(key)) {
       deduped.set(key, {
         timestamp: evolution.timestamp,
@@ -83,20 +109,21 @@ export const parseCleanTextToStructured = (plainText: string): CleanTextStructur
   })
 
   const evolutions = Array.from(deduped.values()).map((evolution) => {
-    const ipssBlockIndex = evolution.texto_completo.toUpperCase().indexOf("ESCALA INTERNACIONAL DE SINTOMAS PROSTATICOS")
-    const ipssText = ipssBlockIndex === -1 ? "" : evolution.texto_completo.slice(ipssBlockIndex)
-    const lines = ipssText.split("\n").map((line) => line.trim())
-    const items = lines
-      .map((line) => line.match(/^(\d+)\s*-\s*(.+?)\s*>\s*([0-9-]+)/))
-      .filter(Boolean)
-      .map((match) => ({
-        n: match?.[1] ?? "",
-        pergunta: match?.[2]?.trim() ?? "",
-        score: match?.[3] ?? "",
-      }))
-      .filter((item) => item.n && item.pergunta && item.score)
+    const upper = evolution.texto_completo.toUpperCase()
+    const ipssIndex = upper.indexOf("ESCALA INTERNACIONAL") !== -1 ? upper.indexOf("ESCALA INTERNACIONAL") : upper.indexOf("IPSS")
+    const ipssText = ipssIndex === -1 ? "" : evolution.texto_completo.slice(ipssIndex)
+    const items: Array<{ n: string; pergunta: string; score: string }> = []
+    let match: RegExpExecArray | null
+    while ((match = IPSS_ITEM_REGEX.exec(ipssText)) !== null) {
+      items.push({
+        n: match[1],
+        pergunta: match[2].trim(),
+        score: match[3].replace(/\s+/g, ""),
+      })
+    }
 
-    const qualidadeVida = lines.find((line) => /QUALIDADE DE VIDA/i.test(line))
+    const qualidadeMatch = ipssText.match(QUALIDADE_VIDA_REGEX)
+    const qualidadeVida = qualidadeMatch?.[1]?.trim()
 
     return {
       ...evolution,
