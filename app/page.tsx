@@ -15,6 +15,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clipboard,
+  Eye,
   FileText,
   Loader2,
   LogOut,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   Search,
   Upload,
+  X,
   UserPlus,
   Users,
   ListChecks,
@@ -74,6 +76,8 @@ export default function AdminHomePage() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [quickViewPatientId, setQuickViewPatientId] = useState<string | null>(null)
+  const [quickViewDocumentId, setQuickViewDocumentId] = useState<string | null>(null)
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -84,6 +88,19 @@ export default function AdminHomePage() {
   const selectedDocument = useMemo(
     () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
     [selectedDocumentId, selectedPatient],
+  )
+
+  const quickViewPatient = useMemo(
+    () => patients.find((patient) => patient.id === quickViewPatientId) ?? null,
+    [patients, quickViewPatientId],
+  )
+
+  const quickViewDocument = useMemo(
+    () =>
+      quickViewPatient?.documents?.find((doc) => doc.id === quickViewDocumentId) ??
+      quickViewPatient?.documents?.[0] ??
+      null,
+    [quickViewDocumentId, quickViewPatient],
   )
 
   useEffect(() => {
@@ -257,6 +274,16 @@ export default function AdminHomePage() {
     router.push("/admin/login")
   }
 
+  const handleOpenQuickView = (patientId: string, documentId?: string | null) => {
+    setQuickViewPatientId(patientId)
+    setQuickViewDocumentId(documentId ?? null)
+  }
+
+  const handleCloseQuickView = () => {
+    setQuickViewPatientId(null)
+    setQuickViewDocumentId(null)
+  }
+
   if (checkingAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -333,22 +360,35 @@ export default function AdminHomePage() {
                   )}
 
                   {filteredPatients.map((patient) => (
-                    <button
+                    <div
                       key={patient.id}
-                      className={`w-full p-4 text-left transition hover:bg-slate-50 ${
+                      className={`flex items-start gap-3 p-4 transition hover:bg-slate-50 ${
                         patient.id === selectedPatient?.id ? "bg-blue-50" : ""
                       }`}
-                      onClick={() => {
-                        setSelectedPatientId(patient.id)
-                        setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
-                      }}
                     >
-                      <p className="font-semibold text-slate-900">{patient.full_name}</p>
-                      <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
-                      </div>
-                    </button>
+                      <button
+                        className="flex-1 text-left"
+                        onClick={() => {
+                          setSelectedPatientId(patient.id)
+                          setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
+                        }}
+                      >
+                        <p className="font-semibold text-slate-900">{patient.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
+                        </div>
+                      </button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => handleOpenQuickView(patient.id, patient.documents?.[0]?.id ?? null)}
+                        aria-label={`Ver relatório de ${patient.full_name}`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
@@ -614,6 +654,59 @@ export default function AdminHomePage() {
           </div>
         </div>
       </div>
+
+      {quickViewPatient && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={handleCloseQuickView}
+            aria-label="Fechar visualização rápida"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative h-full w-full max-w-3xl overflow-y-auto bg-white shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Relatório do paciente</p>
+                <h2 className="text-xl font-semibold text-slate-900">{quickViewPatient.full_name}</h2>
+                <p className="text-xs text-muted-foreground">{quickViewPatient.email || "Sem email"}</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={handleCloseQuickView}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div className="flex flex-wrap gap-2">
+                {quickViewPatient.documents?.map((doc) => (
+                  <Badge
+                    key={doc.id}
+                    variant={doc.id === quickViewDocument?.id ? "default" : "secondary"}
+                    className="cursor-pointer"
+                    onClick={() => setQuickViewDocumentId(doc.id)}
+                  >
+                    {doc.file_name}
+                  </Badge>
+                ))}
+              </div>
+              {quickViewDocument ? (
+                <CleanTextViewer cleanText={quickViewDocument.clean_text || ""} />
+              ) : (
+                <Card className="border-dashed">
+                  <CardHeader>
+                    <CardTitle>Sem relatórios</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Este paciente ainda não possui relatórios cadastrados.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
