@@ -35,6 +35,7 @@ interface PatientDocument {
   file_name: string
   created_at: string
   clean_text: string | null
+  markdown?: string | null
   pdf_url?: string | null
 }
 
@@ -542,7 +543,7 @@ export default function AdminHomePage() {
                           <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
                         </div>
                       ) : (
-                        <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
+                        <CleanTextViewer markdown={selectedDocument.markdown || ""} />
                       )}
                     </div>
 
@@ -710,7 +711,7 @@ export default function AdminHomePage() {
                 ))}
               </div>
               {quickViewDocument ? (
-                <CleanTextViewer cleanText={quickViewDocument.clean_text || ""} />
+                <CleanTextViewer markdown={quickViewDocument.markdown || ""} />
               ) : (
                 <Card className="border-dashed">
                   <CardHeader>
@@ -750,7 +751,7 @@ export default function AdminHomePage() {
               </Button>
             </div>
             <div className="space-y-4 px-6 py-4">
-              <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
+              <CleanTextViewer markdown={selectedDocument.markdown || ""} />
             </div>
           </div>
         </div>
