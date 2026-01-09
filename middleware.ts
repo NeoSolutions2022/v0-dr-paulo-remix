@@ -1,19 +1,31 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_TOKEN } from './lib/admin-auth'
+
+const publicPaths = ['/auth/login', '/auth/sign-up', '/clinica/login', '/admin/login']
+
 export function middleware(request: NextRequest) {
-  // Permitir todas as rotas públicas e de API sem verificação
-  const publicPaths = ['/', '/auth/login', '/auth/sign-up', '/clinica/login', '/api']
-  
-  const isPublic = publicPaths.some(path => 
-    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith('/api/')
-  )
-  
+  const { pathname } = request.nextUrl
+
+  const isPublic =
+    publicPaths.includes(pathname) || pathname.startsWith('/api/') || pathname.startsWith('/public')
+
   if (isPublic) {
     return NextResponse.next()
   }
-  
-  // Para rotas protegidas, apenas continuar (autenticação será feita nas páginas)
+
+  const isAdminArea = pathname === '/' || pathname.startsWith('/admin')
+
+  if (isAdminArea) {
+    const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value
+    if (token !== ADMIN_SESSION_TOKEN) {
+      const loginUrl = new URL('/admin/login', request.url)
+      loginUrl.searchParams.set('redirectTo', pathname)
+      return NextResponse.redirect(loginUrl)
+    }
+  }
+
   return NextResponse.next()
 }
 
