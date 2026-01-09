@@ -78,6 +78,7 @@ export default function AdminHomePage() {
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [quickViewPatientId, setQuickViewPatientId] = useState<string | null>(null)
   const [quickViewDocumentId, setQuickViewDocumentId] = useState<string | null>(null)
+  const [showFormattedReport, setShowFormattedReport] = useState(false)
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -282,6 +283,14 @@ export default function AdminHomePage() {
   const handleCloseQuickView = () => {
     setQuickViewPatientId(null)
     setQuickViewDocumentId(null)
+  }
+
+  const handleOpenFormattedReport = () => {
+    setShowFormattedReport(true)
+  }
+
+  const handleCloseFormattedReport = () => {
+    setShowFormattedReport(false)
   }
 
   if (checkingAuth) {
@@ -560,6 +569,15 @@ export default function AdminHomePage() {
                       </Button>
                       <Button
                         type="button"
+                        variant="secondary"
+                        onClick={handleOpenFormattedReport}
+                        className="w-full md:w-auto"
+                        disabled={!selectedDocument.clean_text}
+                      >
+                        <Eye className="mr-2 h-4 w-4" /> Ver HTML formatado
+                      </Button>
+                      <Button
+                        type="button"
                         variant="outline"
                         onClick={() => {
                           if (selectedDocument.clean_text) {
@@ -703,6 +721,36 @@ export default function AdminHomePage() {
                   </CardContent>
                 </Card>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFormattedReport && selectedDocument && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={handleCloseFormattedReport}
+            aria-label="Fechar visualização formatada"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative h-full w-full max-w-3xl overflow-y-auto bg-white shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Relatório formatado</p>
+                <h2 className="text-xl font-semibold text-slate-900">{selectedPatient?.full_name}</h2>
+                <p className="text-xs text-muted-foreground">{selectedDocument.file_name}</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={handleCloseFormattedReport}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
             </div>
           </div>
         </div>
