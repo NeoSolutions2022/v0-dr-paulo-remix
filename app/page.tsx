@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import CleanTextViewer from "@/components/patient/clean-text-viewer"
 import {
   AlertCircle,
   CheckCircle2,
@@ -486,27 +487,14 @@ export default function AdminHomePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Texto limpo</Label>
-                      <Textarea
-                        className="h-64"
-                        value={selectedDocument.clean_text || ""}
-                        onChange={(event) =>
-                          setPatients((prev) =>
-                            prev.map((patient) =>
-                              patient.id === selectedPatient?.id
-                                ? {
-                                    ...patient,
-                                    documents: patient.documents?.map((doc) =>
-                                      doc.id === selectedDocument.id
-                                        ? { ...doc, clean_text: event.target.value }
-                                        : doc,
-                                    ),
-                                  }
-                                : patient,
-                            ),
-                          )
-                        }
-                      />
+                      <Label>Visualização do texto limpo</Label>
+                      {loadingPatients ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
+                        </div>
+                      ) : (
+                        <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -526,7 +514,7 @@ export default function AdminHomePage() {
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar texto
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações
                           </>
                         )}
                       </Button>
