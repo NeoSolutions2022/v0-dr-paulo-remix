@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
     patient_id: string
     file_name: string
     clean_text: string | null
-    markdown?: string | null
     created_at: string
     pdf_url?: string | null
   }> = []
@@ -56,7 +55,7 @@ export async function GET(request: NextRequest) {
   if (patientIds.length > 0) {
     const { data: docs, error: documentsError } = await supabase
       .from('documents')
-      .select('id, patient_id, file_name, clean_text, markdown, created_at, pdf_url')
+      .select('id, patient_id, file_name, clean_text, created_at, pdf_url')
       .in('patient_id', patientIds)
       .order('created_at', { ascending: false })
 

@@ -5,117 +5,258 @@ export interface PatientInfo {
   telefone?: string
 }
 
-export interface IppsItem {
-  n: string
-  pergunta: string
-  score: string
+export interface EvolutionSection {
+  title: string
+  content: string | string[]
 }
 
 export interface EvolutionStructured {
+  id: string
   timestamp: string
-  ipss: {
-    items: IppsItem[]
-    qualidade_vida_texto?: string
-  }
-  texto_completo: string
+  plain_text: string
+  rtf_original?: string
+  sections: EvolutionSection[]
+  free_text: string
 }
 
-export interface StructuredData {
+export interface CleanTextStructured {
   patient: PatientInfo
   evolutions: EvolutionStructured[]
 }
 
-const normalizeWhitespace = (text: string) =>
-  text.replace(/'a8/g, "").replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+const EVOLUTION_HEADER = /---\s*Evolução em ([\d-]+\s[\d:]+)\s*---/g
 
-const extractBetween = (text: string, start: RegExp, end: RegExp) => {
-  const startMatch = text.match(start)
-  if (!startMatch) return undefined
-  const startIndex = startMatch.index ?? 0
-  const afterStart = text.slice(startIndex + startMatch[0].length)
-  const endMatch = afterStart.match(end)
-  const chunk = endMatch ? afterStart.slice(0, endMatch.index).trim() : afterStart.trim()
-  return chunk
+const CP1252_MAP: Record<number, string> = {
+  0x80: "€",
+  0x82: "‚",
+  0x83: "ƒ",
+  0x84: "„",
+  0x85: "…",
+  0x86: "†",
+  0x87: "‡",
+  0x88: "ˆ",
+  0x89: "‰",
+  0x8a: "Š",
+  0x8b: "‹",
+  0x8c: "Œ",
+  0x8e: "Ž",
+  0x91: "‘",
+  0x92: "’",
+  0x93: "“",
+  0x94: "”",
+  0x95: "•",
+  0x96: "–",
+  0x97: "—",
+  0x98: "˜",
+  0x99: "™",
+  0x9a: "š",
+  0x9b: "›",
+  0x9c: "œ",
+  0x9e: "ž",
+  0x9f: "Ÿ",
 }
 
-const extractPatientInfo = (markdown: string): PatientInfo => {
-  const codigoMatch = markdown.match(/Código[^0-9]*([0-9]+)/i)
-  const nomeChunk = extractBetween(markdown, /Nome:/i, /Data de Nascimento:/i)
-  const dataMatch = markdown.match(/Data de Nascimento:\s*(\d{4}-\d{2}-\d{2})/i)
-  const telefoneMatch = markdown.match(/Telefone:\s*([0-9]+)/i)
+const normalizeLineBreaks = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
 
-  return {
-    codigo: codigoMatch?.[1],
-    nome: nomeChunk ? normalizeWhitespace(nomeChunk) : undefined,
-    data_nascimento: dataMatch?.[1],
-    telefone: telefoneMatch?.[1],
-  }
+export const normalizeCleanText = (cleanText: string) => {
+  let normalized = normalizeLineBreaks(cleanText)
+  normalized = normalized.replace(/(=+)/g, "\n$1")
+  normalized = normalized.replace(/---\s*Evolução em/g, "\n--- Evolução em")
+  normalized = normalized.replace(/[^\x09\x0A\x20-\x7E\xA0-\uFFFF]/g, "")
+  normalized = normalized
+    .split(/\n/)
+    .map((line) => line.trim())
+    .join("\n")
+  normalized = normalized.replace(/ {3,}/g, " ")
+  normalized = normalized.replace(/\n{3,}/g, "\n\n").trim()
+  return normalized
 }
 
-const extractEvolutions = (markdown: string) => {
-  const matches = Array.from(markdown.matchAll(/###\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/g))
-  const evolutions = matches.map((match, index) => {
-    const timestamp = match[1]
+export const splitSections = (normalizedText: string) => {
+  const matches = Array.from(normalizedText.matchAll(EVOLUTION_HEADER))
+  const firstEvolutionIndex = matches[0]?.index ?? normalizedText.length
+  const patientHeaderBlock = normalizedText.slice(0, firstEvolutionIndex).trim()
+  const evolutionsRaw = matches.map((match, index) => {
+    const timestamp = match[1]?.trim() || "Sem data"
     const startIndex = (match.index ?? 0) + match[0].length
-    const endIndex = matches[index + 1]?.index ?? markdown.length
-    const rawBody = markdown.slice(startIndex, endIndex).trim()
-    const normalizedBody = normalizeWhitespace(rawBody)
-    return { timestamp, rawBody, normalizedBody }
+    const endIndex = matches[index + 1]?.index ?? normalizedText.length
+    const raw = normalizedText.slice(startIndex, endIndex).trim()
+    return { timestamp, raw }
   })
 
-  const deduped = new Map<string, { timestamp: string; texto_completo: string }>()
-  evolutions.forEach((evolution) => {
-    const key = `${evolution.timestamp}__${evolution.normalizedBody}`
-    if (!deduped.has(key)) {
-      deduped.set(key, { timestamp: evolution.timestamp, texto_completo: evolution.normalizedBody })
-    }
-  })
-
-  return Array.from(deduped.values())
+  return { patientHeaderBlock, evolutionsRaw }
 }
 
-const parseIpps = (body: string) => {
-  const blockMatch = body.match(/\*\*IPSS\*\*([\s\S]*?)(\n\*\*|$)/i)
-  if (!blockMatch) {
-    return { items: [], qualidade_vida_texto: undefined }
+export const parsePatientHeader = (patientHeaderBlock: string): PatientInfo => {
+  const extract = (regex: RegExp) => patientHeaderBlock.match(regex)?.[1]?.trim()
+  return {
+    codigo: extract(/Código:\s*([^\n]+)/i),
+    nome: extract(/Nome:\s*([^\n]+)/i),
+    data_nascimento: extract(/Data de Nascimento:\s*([^\n]+)/i),
+    telefone: extract(/Telefone:\s*([^\n]+)/i),
   }
-  const block = blockMatch[1]
-  const lines = block.split("\n").map((line) => line.trim()).filter(Boolean)
-
-  const items: IppsItem[] = []
-  let qualidadeVida: string | undefined
-
-  lines.forEach((line) => {
-    const qualityMatch = line.match(/QUALIDADE DE VIDA[^>]*>?(.+)?/i)
-    if (qualityMatch) {
-      qualidadeVida = line.replace(/\s{2,}/g, " ").trim()
-      return
-    }
-
-    const itemMatch = line.match(/(\d+)-\s*([^>]+?)\s*>\s*([0-9]+)/)
-    if (itemMatch) {
-      items.push({
-        n: itemMatch[1],
-        pergunta: itemMatch[2].trim(),
-        score: itemMatch[3].trim(),
-      })
-    }
-  })
-
-  return { items, qualidade_vida_texto: qualidadeVida }
 }
 
-export const parseMarkdownToStructured = (markdown: string): StructuredData => {
-  const patient = extractPatientInfo(markdown)
-  const evolutionsRaw = extractEvolutions(markdown)
-  const evolutions = evolutionsRaw.map((evolution) => ({
-    timestamp: evolution.timestamp,
-    ipss: parseIpps(evolution.texto_completo),
-    texto_completo: evolution.texto_completo,
-  }))
+const decodeHex = (hex: string) => {
+  const value = parseInt(hex, 16)
+  if (Number.isNaN(value)) return ""
+  if (value >= 0x80 && value <= 0x9f) {
+    return CP1252_MAP[value] ?? ""
+  }
+  return String.fromCharCode(value)
+}
+
+const stripRtfBlocks = (text: string) =>
+  text
+    .replace(/\{\\\*?\\fonttbl[\s\S]*?\}/gi, "")
+    .replace(/\{\\\*?\\colortbl[\s\S]*?\}/gi, "")
+    .replace(/\{\\\*?\\stylesheet[\s\S]*?\}/gi, "")
+    .replace(/\{\\\*?\\generator[\s\S]*?\}/gi, "")
+
+export const rtfToPlainText = (raw: string) => {
+  let text = normalizeLineBreaks(raw)
+  const hasRtf = text.includes("{\\rtf")
+  if (hasRtf) {
+    text = stripRtfBlocks(text)
+    text = text.replace(/\\par[d]?/gi, "\n").replace(/\\tab/gi, "\t")
+    text = text.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => decodeHex(hex))
+    text = text.replace(/\\[a-zA-Z]+\d* ?/g, "")
+    text = text.replace(/[{}]/g, "")
+  }
+
+  text = text
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/ {2,}/g, " ")
+    .trim()
+
+  return text
+}
+
+const extractKeyValueSections = (plainText: string) => {
+  const lines = plainText.split("\n")
+  const matches: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (/^[A-ZÇÃÕÉÍÓÚÂÊÔÁÀÜ][A-ZÇÃÕÉÍÓÚÂÊÔÁÀÜ\s/]*-\s*/.test(trimmed)) {
+      matches.push(trimmed)
+    }
+  }
+
+  return matches
+}
+
+const extractPSA = (plainText: string) => {
+  const psaLines = plainText.split("\n").filter((line) => /psa/i.test(line))
+  const entries: string[] = []
+  psaLines.forEach((line) => {
+    const normalized = line.replace(/psa/i, "PSA")
+    const matches = normalized.match(/(\d{2}\/\d{2}\/\d{4})\s*([0-9.,]+)/g)
+    if (matches) {
+      matches.forEach((match) => entries.push(match.trim()))
+    } else if (normalized.trim()) {
+      entries.push(normalized.trim())
+    }
+  })
+  return entries
+}
+
+const extractIPSS = (plainText: string) => {
+  const ipssIndex = plainText.toUpperCase().indexOf("ESCALA INTERNACIONAL DE SINTOMAS PROSTATICOS")
+  if (ipssIndex === -1) return []
+  const ipssBlock = plainText.slice(ipssIndex)
+  const questions = ipssBlock
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\d+\-/.test(line) || /QUALIDADE DE VIDA/i.test(line))
+  return questions
+}
+
+export const structureEvolution = (plainText: string) => {
+  const sections: EvolutionSection[] = []
+  const keyValueLines = extractKeyValueSections(plainText)
+  if (keyValueLines.length) {
+    sections.push({ title: "Resumo clínico", content: keyValueLines })
+  }
+
+  const psaEntries = extractPSA(plainText)
+  if (psaEntries.length) {
+    sections.push({ title: "PSA", content: psaEntries })
+  }
+
+  const ipssEntries = extractIPSS(plainText)
+  if (ipssEntries.length) {
+    sections.push({ title: "IPSS", content: ipssEntries })
+  }
 
   return {
+    sections,
+    free_text: plainText,
+  }
+}
+
+export const toMarkdown = (structured: CleanTextStructured) => {
+  const lines: string[] = []
+  lines.push("## Ficha do Paciente")
+  lines.push("")
+  lines.push("| Campo | Valor |")
+  lines.push("| --- | --- |")
+  lines.push(`| Código | ${structured.patient.codigo ?? "-"} |`)
+  lines.push(`| Nome | ${structured.patient.nome ?? "-"} |`)
+  lines.push(`| Data de Nascimento | ${structured.patient.data_nascimento ?? "-"} |`)
+  lines.push(`| Telefone | ${structured.patient.telefone ?? "-"} |`)
+  lines.push("")
+
+  lines.push(`## Evoluções (${structured.evolutions.length})`)
+  structured.evolutions.forEach((evolution) => {
+    lines.push("")
+    lines.push(`### ${evolution.timestamp}`)
+    evolution.sections.forEach((section) => {
+      lines.push("")
+      lines.push(`**${section.title}**`)
+      if (Array.isArray(section.content)) {
+        section.content.forEach((item) => lines.push(`- ${item}`))
+      } else {
+        lines.push(section.content)
+      }
+    })
+    lines.push("")
+    lines.push("**Texto completo**")
+    lines.push("")
+    lines.push(evolution.free_text)
+  })
+
+  return lines.join("\n")
+}
+
+export const buildCleanTextPipeline = (cleanText: string) => {
+  const normalized_text = normalizeCleanText(cleanText)
+  const { patientHeaderBlock, evolutionsRaw } = splitSections(normalized_text)
+  const patient = parsePatientHeader(patientHeaderBlock)
+  const evolutions = evolutionsRaw.map((evolution, index) => {
+    const plainText = rtfToPlainText(evolution.raw)
+    const structured = structureEvolution(plainText)
+    return {
+      id: `${evolution.timestamp}-${index}`,
+      timestamp: evolution.timestamp,
+      plain_text: plainText,
+      rtf_original: evolution.raw.includes("{\\rtf") ? evolution.raw : undefined,
+      sections: structured.sections,
+      free_text: structured.free_text,
+    }
+  })
+
+  const structured_json: CleanTextStructured = {
     patient,
     evolutions,
+  }
+
+  const markdown = toMarkdown(structured_json)
+
+  return {
+    cleaned_text: normalized_text,
+    structured_json,
+    markdown,
   }
 }
