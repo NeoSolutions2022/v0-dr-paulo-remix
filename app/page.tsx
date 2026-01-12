@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import CleanTextViewer from "@/components/patient/clean-text-viewer"
+import HtmlReportViewer from "@/components/patient/html-report-viewer"
 import {
   AlertCircle,
   CheckCircle2,
@@ -35,6 +35,8 @@ interface PatientDocument {
   file_name: string
   created_at: string
   clean_text: string | null
+  html?: string | null
+  html_generated_at?: string | null
   pdf_url?: string | null
 }
 
@@ -79,6 +81,9 @@ export default function AdminHomePage() {
   const [quickViewPatientId, setQuickViewPatientId] = useState<string | null>(null)
   const [quickViewDocumentId, setQuickViewDocumentId] = useState<string | null>(null)
   const [showFormattedReport, setShowFormattedReport] = useState(false)
+  const [htmlCache, setHtmlCache] = useState<Record<string, string>>({})
+  const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null)
+  const [htmlErrors, setHtmlErrors] = useState<Record<string, string>>({})
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -292,6 +297,45 @@ export default function AdminHomePage() {
   const handleCloseFormattedReport = () => {
     setShowFormattedReport(false)
   }
+
+  const fetchHtmlReport = async (documentId: string, force = false) => {
+    setHtmlLoadingId(documentId)
+    setHtmlErrors((prev) => ({ ...prev, [documentId]: "" }))
+    try {
+      const response = await fetch(`/api/documents/${documentId}/generate-html`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao gerar HTML")
+      }
+      setHtmlCache((prev) => ({ ...prev, [documentId]: data.html }))
+      return data.html as string
+    } catch (err: any) {
+      setHtmlErrors((prev) => ({ ...prev, [documentId]: err.message || "Erro ao gerar HTML" }))
+      return ""
+    } finally {
+      setHtmlLoadingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedDocument?.id) return
+    const existingHtml = selectedDocument.html || htmlCache[selectedDocument.id]
+    if (!existingHtml && htmlLoadingId !== selectedDocument.id) {
+      fetchHtmlReport(selectedDocument.id)
+    }
+  }, [selectedDocument?.id, selectedDocument?.html, htmlCache, htmlLoadingId])
+
+  useEffect(() => {
+    if (!quickViewDocument?.id) return
+    const existingHtml = quickViewDocument.html || htmlCache[quickViewDocument.id]
+    if (!existingHtml && htmlLoadingId !== quickViewDocument.id) {
+      fetchHtmlReport(quickViewDocument.id)
+    }
+  }, [quickViewDocument?.id, quickViewDocument?.html, htmlCache, htmlLoadingId])
 
   if (checkingAuth) {
     return (
@@ -542,7 +586,12 @@ export default function AdminHomePage() {
                           <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
                         </div>
                       ) : (
-                        <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
+                        <HtmlReportViewer
+                          html={selectedDocument.html || htmlCache[selectedDocument.id]}
+                        />
+                      )}
+                      {htmlErrors[selectedDocument.id] && (
+                        <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
                       )}
                     </div>
 
@@ -566,6 +615,20 @@ export default function AdminHomePage() {
                             <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações
                           </>
                         )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fetchHtmlReport(selectedDocument.id, true)}
+                        className="w-full md:w-auto"
+                        disabled={htmlLoadingId === selectedDocument.id}
+                      >
+                        {htmlLoadingId === selectedDocument.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Regenerar HTML
                       </Button>
                       <Button
                         type="button"
@@ -710,7 +773,7 @@ export default function AdminHomePage() {
                 ))}
               </div>
               {quickViewDocument ? (
-                <CleanTextViewer cleanText={quickViewDocument.clean_text || ""} />
+                <HtmlReportViewer html={quickViewDocument.html || htmlCache[quickViewDocument.id]} />
               ) : (
                 <Card className="border-dashed">
                   <CardHeader>
@@ -750,7 +813,10 @@ export default function AdminHomePage() {
               </Button>
             </div>
             <div className="space-y-4 px-6 py-4">
-              <CleanTextViewer cleanText={selectedDocument.clean_text || ""} />
+              <HtmlReportViewer html={selectedDocument.html || htmlCache[selectedDocument.id]} />
+              {htmlErrors[selectedDocument.id] && (
+                <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
+              )}
             </div>
           </div>
         </div>
