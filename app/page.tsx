@@ -929,20 +929,24 @@ export default function AdminHomePage() {
                   <div className="rounded-lg border p-3 space-y-2">
                     <p className="text-sm font-semibold">Credenciais de acesso</p>
                     <p className="text-xs text-slate-500">
-                      Login preferencial por CPF ou email.
+                      Acesso pelo /login com nome completo e senha.
                     </p>
                     <div className="text-sm">
                       <p>
-                        <span className="text-slate-500">CPF:</span>{" "}
-                        <span className="font-medium">{previewPatient.cpf || "Não informado"}</span>
+                        <span className="text-slate-500">Login (nome completo):</span>{" "}
+                        <span className="font-medium">{previewPatient.full_name || "Não informado"}</span>
                       </p>
                       <p>
-                        <span className="text-slate-500">Email:</span>{" "}
-                        <span className="font-medium">{previewPatient.email || "Não informado"}</span>
+                        <span className="text-slate-500">Senha (AAAAMMDD):</span>{" "}
+                        <span className="font-medium">
+                          {previewPatient.birth_date
+                            ? previewPatient.birth_date.replace(/-/g, "")
+                            : "Data de nascimento não informada"}
+                        </span>
                       </p>
                       <p>
-                        <span className="text-slate-500">Senha:</span>{" "}
-                        <span className="font-medium">Não armazenada (redefina pelo fluxo de acesso)</span>
+                        <span className="text-slate-500">URL:</span>{" "}
+                        <span className="font-medium">/login</span>
                       </p>
                     </div>
                   </div>
