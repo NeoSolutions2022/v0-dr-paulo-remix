@@ -11,39 +11,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
-interface PatientDocument {
-  html_generated_at?: string | null
-  const [htmlCache, setHtmlCache] = useState<Record<string, string>>({})
-  const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null)
-  const [htmlErrors, setHtmlErrors] = useState<Record<string, string>>({})
-import HtmlReportViewer from "@/components/patient/html-report-viewer"
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clipboard,
-  Eye,
-  FileText,
-  Loader2,
-  LogOut,
-  PenSquare,
-  RefreshCw,
-  Search,
-  Upload,
-  X,
-  UserPlus,
-  Users,
-  ListChecks,
-} from "lucide-react"
-
-interface PatientDocument {
-  id: string
-  patient_id: string
-  file_name: string
-  created_at: string
-  clean_text: string | null
-  html?: string | null
-  html_generated_at?: string | null
-  pdf_url?: string | null
+import type { Patient, PatientDocument, UploadResult } from "@/lib/types/patient"
 }
 
 interface Patient {
