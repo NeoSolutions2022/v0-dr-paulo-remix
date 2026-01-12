@@ -218,7 +218,7 @@ export default function AdminHomePage() {
         throw new Error(data.error || "Falha ao gerar HTML")
       }
       setHtmlCache((prev) => ({ ...prev, [documentId]: data.html }))
-      return data.html as string
+      return data.html
     } catch (err: any) {
       setHtmlErrors((prev) => ({ ...prev, [documentId]: err.message || "Erro ao gerar HTML" }))
       return ""
