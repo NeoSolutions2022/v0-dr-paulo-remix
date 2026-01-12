@@ -10,48 +10,26 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clipboard,
-  FileText,
-  Loader2,
-  LogOut,
-  PenSquare,
-  RefreshCw,
-  Search,
-  Upload,
-  UserPlus,
-  Users,
+import HtmlReportViewer from "@/components/patient/html-report-viewer"
   ListChecks,
 } from "lucide-react"
+  const [patients, setPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const [selectedDocumentId, setSelectedDocumentId] = useState(null)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [htmlCache, setHtmlCache] = useState({})
+  const [htmlLoadingId, setHtmlLoadingId] = useState(null)
+  const [htmlErrors, setHtmlErrors] = useState({})
+    } catch (err) {
+  const handlePatientUpdate = async (formData) => {
 
-interface PatientDocument {
-  id: string
-  patient_id: string
-  file_name: string
-  created_at: string
-  clean_text: string | null
-  pdf_url?: string | null
-}
-
-interface Patient {
-  id: string
-  full_name: string
-  email: string | null
-  birth_date: string | null
-  created_at?: string
-  updated_at?: string
-  documents?: PatientDocument[]
-}
-
-interface UploadResult {
-  cleanText: string
-  credentials?: {
-    loginName?: string
-    password?: string
-    existing?: boolean
-  }
+    } catch (err) {
+  const handleDocumentUpdate = async (changes) => {
+    } catch (err) {
+  const handleFileUpload = async (event) => {
+    } catch (err) {
+  const fetchHtmlReport = async (documentId, force = false) => {
+    } catch (err) {
   message?: string
   patient?: Patient
   document?: PatientDocument
@@ -73,6 +51,12 @@ export default function AdminHomePage() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [quickViewPatientId, setQuickViewPatientId] = useState<string | null>(null)
+  const [quickViewDocumentId, setQuickViewDocumentId] = useState<string | null>(null)
+  const [showFormattedReport, setShowFormattedReport] = useState(false)
+  const [htmlCache, setHtmlCache] = useState<Record<string, string>>({})
+  const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null)
+  const [htmlErrors, setHtmlErrors] = useState<Record<string, string>>({})
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -83,6 +67,19 @@ export default function AdminHomePage() {
   const selectedDocument = useMemo(
     () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
     [selectedDocumentId, selectedPatient],
+  )
+
+  const quickViewPatient = useMemo(
+    () => patients.find((patient) => patient.id === quickViewPatientId) ?? null,
+    [patients, quickViewPatientId],
+  )
+
+  const quickViewDocument = useMemo(
+    () =>
+      quickViewPatient?.documents?.find((doc) => doc.id === quickViewDocumentId) ??
+      quickViewPatient?.documents?.[0] ??
+      null,
+    [quickViewDocumentId, quickViewPatient],
   )
 
   useEffect(() => {
@@ -207,6 +204,37 @@ export default function AdminHomePage() {
 
     const text = await file.text()
     setUploadFileName(file.name)
+  const fetchHtmlReport = async (documentId: string, force = false) => {
+    setHtmlLoadingId(documentId)
+    setHtmlErrors((prev) => ({ ...prev, [documentId]: "" }))
+    try {
+      const response = await fetch(`/api/documents/${documentId}/generate-html`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao gerar HTML")
+      }
+      setHtmlCache((prev) => ({ ...prev, [documentId]: data.html }))
+      return data.html
+    } catch (err: any) {
+      setHtmlErrors((prev) => ({ ...prev, [documentId]: err.message || "Erro ao gerar HTML" }))
+      return ""
+    } finally {
+      setHtmlLoadingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedDocument?.id) return
+    const existingHtml = selectedDocument.html || htmlCache[selectedDocument.id]
+    if (!existingHtml && htmlLoadingId !== selectedDocument.id) {
+      fetchHtmlReport(selectedDocument.id)
+    }
+  }, [selectedDocument?.id, selectedDocument?.html, htmlCache, htmlLoadingId])
+
     setUploadText(text)
     setUploadResult(null)
   }
@@ -255,6 +283,63 @@ export default function AdminHomePage() {
     await fetch("/api/admin/logout", { method: "POST" })
     router.push("/admin/login")
   }
+
+  const handleOpenQuickView = (patientId: string, documentId?: string | null) => {
+    setQuickViewPatientId(patientId)
+    setQuickViewDocumentId(documentId ?? null)
+  }
+
+  const handleCloseQuickView = () => {
+    setQuickViewPatientId(null)
+    setQuickViewDocumentId(null)
+  }
+
+  const handleOpenFormattedReport = () => {
+    setShowFormattedReport(true)
+  }
+
+  const handleCloseFormattedReport = () => {
+    setShowFormattedReport(false)
+  }
+
+  const fetchHtmlReport = async (documentId: string, force = false) => {
+    setHtmlLoadingId(documentId)
+    setHtmlErrors((prev) => ({ ...prev, [documentId]: "" }))
+    try {
+      const response = await fetch(`/api/documents/${documentId}/generate-html`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao gerar HTML")
+      }
+      setHtmlCache((prev) => ({ ...prev, [documentId]: data.html }))
+      return data.html as string
+    } catch (err: any) {
+      setHtmlErrors((prev) => ({ ...prev, [documentId]: err.message || "Erro ao gerar HTML" }))
+      return ""
+    } finally {
+      setHtmlLoadingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedDocument?.id) return
+    const existingHtml = selectedDocument.html || htmlCache[selectedDocument.id]
+    if (!existingHtml && htmlLoadingId !== selectedDocument.id) {
+      fetchHtmlReport(selectedDocument.id)
+    }
+  }, [selectedDocument?.id, selectedDocument?.html, htmlCache, htmlLoadingId])
+
+  useEffect(() => {
+    if (!quickViewDocument?.id) return
+    const existingHtml = quickViewDocument.html || htmlCache[quickViewDocument.id]
+    if (!existingHtml && htmlLoadingId !== quickViewDocument.id) {
+      fetchHtmlReport(quickViewDocument.id)
+    }
+  }, [quickViewDocument?.id, quickViewDocument?.html, htmlCache, htmlLoadingId])
 
   if (checkingAuth) {
     return (
@@ -332,22 +417,35 @@ export default function AdminHomePage() {
                   )}
 
                   {filteredPatients.map((patient) => (
-                    <button
+                    <div
                       key={patient.id}
-                      className={`w-full p-4 text-left transition hover:bg-slate-50 ${
+                      className={`flex items-start gap-3 p-4 transition hover:bg-slate-50 ${
                         patient.id === selectedPatient?.id ? "bg-blue-50" : ""
                       }`}
-                      onClick={() => {
-                        setSelectedPatientId(patient.id)
-                        setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
-                      }}
                     >
-                      <p className="font-semibold text-slate-900">{patient.full_name}</p>
-                      <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                        <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
-                      </div>
-                    </button>
+                      <button
+                        className="flex-1 text-left"
+                        onClick={() => {
+                          setSelectedPatientId(patient.id)
+                          setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
+                        }}
+                      >
+                        <p className="font-semibold text-slate-900">{patient.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
+                        </div>
+                      </button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        onClick={() => handleOpenQuickView(patient.id, patient.documents?.[0]?.id ?? null)}
+                        aria-label={`Ver relatório de ${patient.full_name}`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
@@ -367,27 +465,31 @@ export default function AdminHomePage() {
                   <div className="space-y-2">
                     <Label htmlFor="full_name">Nome completo</Label>
                     <Input
-                      id="full_name"
-                      value={selectedPatient?.full_name || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
-                          prev.map((patient) =>
-                            patient.id === selectedPatient?.id
-                              ? { ...patient, full_name: event.target.value }
-                              : patient,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={selectedPatient?.email || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
+                      <Label>Relatório HTML</Label>
+                      {loadingPatients ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
+                        </div>
+                      ) : (
+                        <HtmlReportViewer html={selectedDocument.html || htmlCache[selectedDocument.id]} />
+                      )}
+                      {htmlErrors[selectedDocument.id] && (
+                        <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fetchHtmlReport(selectedDocument.id, true)}
+                        className="w-full md:w-auto"
+                        disabled={htmlLoadingId === selectedDocument.id}
+                      >
+                        {htmlLoadingId === selectedDocument.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Regenerar HTML
+                      </Button>
                           prev.map((patient) =>
                             patient.id === selectedPatient?.id
                               ? { ...patient, email: event.target.value }
@@ -486,27 +588,19 @@ export default function AdminHomePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Texto limpo</Label>
-                      <Textarea
-                        className="h-64"
-                        value={selectedDocument.clean_text || ""}
-                        onChange={(event) =>
-                          setPatients((prev) =>
-                            prev.map((patient) =>
-                              patient.id === selectedPatient?.id
-                                ? {
-                                    ...patient,
-                                    documents: patient.documents?.map((doc) =>
-                                      doc.id === selectedDocument.id
-                                        ? { ...doc, clean_text: event.target.value }
-                                        : doc,
-                                    ),
-                                  }
-                                : patient,
-                            ),
-                          )
-                        }
-                      />
+                      <Label>Visualização do texto limpo</Label>
+                      {loadingPatients ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
+                        </div>
+                      ) : (
+                        <HtmlReportViewer
+                          html={selectedDocument.html || htmlCache[selectedDocument.id]}
+                        />
+                      )}
+                      {htmlErrors[selectedDocument.id] && (
+                        <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -526,9 +620,32 @@ export default function AdminHomePage() {
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar texto
+                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações
                           </>
                         )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fetchHtmlReport(selectedDocument.id, true)}
+                        className="w-full md:w-auto"
+                        disabled={htmlLoadingId === selectedDocument.id}
+                      >
+                        {htmlLoadingId === selectedDocument.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Regenerar HTML
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleOpenFormattedReport}
+                        className="w-full md:w-auto"
+                        disabled={!selectedDocument.clean_text}
+                      >
+                        <Eye className="mr-2 h-4 w-4" /> Ver HTML formatado
                       </Button>
                       <Button
                         type="button"
@@ -626,6 +743,92 @@ export default function AdminHomePage() {
           </div>
         </div>
       </div>
+
+      {quickViewPatient && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={handleCloseQuickView}
+            aria-label="Fechar visualização rápida"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative h-full w-full max-w-3xl overflow-y-auto bg-white shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Relatório do paciente</p>
+                <h2 className="text-xl font-semibold text-slate-900">{quickViewPatient.full_name}</h2>
+                <p className="text-xs text-muted-foreground">{quickViewPatient.email || "Sem email"}</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={handleCloseQuickView}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <div className="flex flex-wrap gap-2">
+                {quickViewPatient.documents?.map((doc) => (
+                  <Badge
+                    key={doc.id}
+                    variant={doc.id === quickViewDocument?.id ? "default" : "secondary"}
+                    className="cursor-pointer"
+                    onClick={() => setQuickViewDocumentId(doc.id)}
+                  >
+                    {doc.file_name}
+                  </Badge>
+                ))}
+              </div>
+              {quickViewDocument ? (
+                <HtmlReportViewer html={quickViewDocument.html || htmlCache[quickViewDocument.id]} />
+              ) : (
+                <Card className="border-dashed">
+                  <CardHeader>
+                    <CardTitle>Sem relatórios</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Este paciente ainda não possui relatórios cadastrados.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFormattedReport && selectedDocument && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={handleCloseFormattedReport}
+            aria-label="Fechar visualização formatada"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative h-full w-full max-w-3xl overflow-y-auto bg-white shadow-xl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">Relatório formatado</p>
+                <h2 className="text-xl font-semibold text-slate-900">{selectedPatient?.full_name}</h2>
+                <p className="text-xs text-muted-foreground">{selectedDocument.file_name}</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={handleCloseFormattedReport}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-4 px-6 py-4">
+              <HtmlReportViewer html={selectedDocument.html || htmlCache[selectedDocument.id]} />
+              {htmlErrors[selectedDocument.id] && (
+                <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
