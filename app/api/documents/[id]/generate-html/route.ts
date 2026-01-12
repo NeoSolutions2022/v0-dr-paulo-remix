@@ -5,6 +5,7 @@ import { sanitizeHtml } from "@/lib/html-sanitizer"
 import { renderMedicalReportHtml, StructuredMedicalReport } from "@/lib/medical-report"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import crypto from "crypto"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -79,6 +80,52 @@ function stripJsonComments(input: string) {
     .trim()
 }
 
+function escapeNewlinesInStrings(input: string) {
+  let inString = false
+  let escapeNext = false
+  let result = ""
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i]
+
+    if (escapeNext) {
+      result += char
+      escapeNext = false
+      continue
+    }
+
+    if (char === "\\") {
+      if (inString) {
+        escapeNext = true
+      }
+      result += char
+      continue
+    }
+
+    if (char === "\"") {
+      inString = !inString
+      result += char
+      continue
+    }
+
+    if (inString && (char === "\n" || char === "\r")) {
+      if (char === "\r" && input[i + 1] === "\n") {
+        i += 1
+      }
+      result += "\\n"
+      continue
+    }
+
+    if (char < " " && char !== "\t" && char !== "\n" && char !== "\r") {
+      continue
+    }
+
+    result += char
+  }
+
+  return result
+}
+
 function stripTrailingCommas(input: string) {
   return input.replace(/,\s*([}\]])/g, "$1")
 }
@@ -139,7 +186,13 @@ function parseGeminiJson(rawText: string) {
 
   const cleanedAttempts = attempts.flatMap((attempt) => {
     const noComments = stripJsonComments(attempt)
-    return [noComments, stripTrailingCommas(noComments)]
+    const noTrailing = stripTrailingCommas(noComments)
+    return [
+      noComments,
+      noTrailing,
+      escapeNewlinesInStrings(noComments),
+      escapeNewlinesInStrings(noTrailing),
+    ]
   })
 
   for (const candidate of cleanedAttempts) {
@@ -212,8 +265,11 @@ export async function POST(
   }
 
   const forceParam = request.nextUrl.searchParams.get("force")
+  const debugParam = request.nextUrl.searchParams.get("debug")
   const force =
     forceParam === "true" || body?.force === true || body?.force === "true"
+  const debug =
+    debugParam === "true" || body?.debug === true || body?.debug === "true"
 
   const adminCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value
   const isAdmin = hasValidAdminSession(adminCookie)
@@ -261,14 +317,42 @@ export async function POST(
   }
 
   let structured: StructuredMedicalReport
+  let rawGeminiText = ""
   try {
-    const rawText = await callGemini(document.clean_text, apiKey)
-    structured = parseGeminiJson(rawText)
+    rawGeminiText = await callGemini(document.clean_text, apiKey)
+    structured = parseGeminiJson(rawGeminiText)
   } catch (error: any) {
-    const message = error?.message === "Gemini returned empty content"
-      ? "Gemini returned empty content"
-      : "Falha ao interpretar a resposta do Gemini"
-    console.error("Erro ao interpretar JSON do Gemini", error)
+    const message =
+      error?.message === "Gemini returned empty content"
+        ? "Gemini returned empty content"
+        : "Falha ao interpretar a resposta do Gemini"
+
+    const rawLength = rawGeminiText.length
+    const rawHash = rawGeminiText
+      ? crypto.createHash("sha256").update(rawGeminiText).digest("hex")
+      : null
+    const debugInfo = {
+      rawLength,
+      rawHash,
+      hasCodeFence: /```/.test(rawGeminiText),
+      hasJsonObject: rawGeminiText.includes("{") && rawGeminiText.includes("}"),
+    }
+
+    console.error("Erro ao interpretar JSON do Gemini", { error, ...debugInfo })
+
+    if (debug && isAdmin) {
+      return NextResponse.json(
+        {
+          error: message,
+          debug: {
+            ...debugInfo,
+            preview: rawGeminiText.slice(0, 800),
+          },
+        },
+        { status: 502 },
+      )
+    }
+
     return NextResponse.json({ error: message }, { status: 502 })
   }
 
