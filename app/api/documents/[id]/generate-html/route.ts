@@ -58,19 +58,57 @@ REGRAS:
 - "raw_text_clean" deve remover lixo RTF e caracteres estranhos; manter legível.
 `
 
-function parseGeminiJson(rawText: string) {
-  try {
-    return JSON.parse(rawText) as StructuredMedicalReport
-  } catch (error) {
-    const startIndex = rawText.indexOf("{")
-    const endIndex = rawText.lastIndexOf("}")
-    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-      throw error
-    }
+function stripMarkdownFences(input: string) {
+  return input
+    .replace(/```json/gi, "```")
+    .replace(/```/g, "")
+    .trim()
+}
 
-    const sliced = rawText.slice(startIndex, endIndex + 1)
-    return JSON.parse(sliced) as StructuredMedicalReport
+function stripJsonComments(input: string) {
+  return input
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n\r]*/g, "")
+    .trim()
+}
+
+function stripTrailingCommas(input: string) {
+  return input.replace(/,\s*([}\]])/g, "$1")
+}
+
+function extractFirstJsonObject(input: string) {
+  const startIndex = input.indexOf("{")
+  const endIndex = input.lastIndexOf("}")
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return null
   }
+  return input.slice(startIndex, endIndex + 1)
+}
+
+function parseGeminiJson(rawText: string) {
+  const attempts: string[] = []
+  attempts.push(rawText)
+  attempts.push(stripMarkdownFences(rawText))
+
+  const extracted = extractFirstJsonObject(rawText)
+  if (extracted) {
+    attempts.push(extracted)
+  }
+
+  const cleanedAttempts = attempts.flatMap((attempt) => {
+    const noComments = stripJsonComments(attempt)
+    return [noComments, stripTrailingCommas(noComments)]
+  })
+
+  for (const candidate of cleanedAttempts) {
+    try {
+      return JSON.parse(candidate) as StructuredMedicalReport
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error("Invalid JSON response")
 }
 
 async function callGemini(cleanText: string, apiKey: string) {
