@@ -269,7 +269,9 @@ export async function POST(
   const force =
     forceParam === "true" || body?.force === true || body?.force === "true"
   const debug =
-    debugParam === "true" || body?.debug === true || body?.debug === "true"
+    debugParam === "false" || body?.debug === false || body?.debug === "false"
+      ? false
+      : isAdmin
 
   const adminCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value
   const isAdmin = hasValidAdminSession(adminCookie)
