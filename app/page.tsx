@@ -1,18 +1,18 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
-import HtmlReportViewer from "@/components/patient/html-report-viewer"
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import HtmlReportViewer from "@/components/patient/html-report-viewer";
   ListChecks,
-
+} from "lucide-react";
   const [patients, setPatients] = useState([])
   const [selectedPatientId, setSelectedPatientId] = useState(null)
   const [selectedDocumentId, setSelectedDocumentId] = useState(null)
