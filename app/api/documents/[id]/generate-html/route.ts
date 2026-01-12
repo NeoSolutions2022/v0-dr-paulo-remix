@@ -122,7 +122,12 @@ async function callGemini(cleanText: string, apiKey: string) {
     },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: promptFinal }] }],
-      generationConfig: { temperature: 0.2, topP: 0.9, maxOutputTokens: 8192 },
+      generationConfig: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+      },
     }),
   })
 
@@ -133,7 +138,10 @@ async function callGemini(cleanText: string, apiKey: string) {
   }
 
   const payload = await response.json()
-  const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text
+  const parts = payload?.candidates?.[0]?.content?.parts
+  const rawText = Array.isArray(parts)
+    ? parts.map((part: { text?: string }) => (typeof part?.text === "string" ? part.text : "")).join("")
+    : ""
   if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
     throw new Error("Gemini returned empty content")
   }
