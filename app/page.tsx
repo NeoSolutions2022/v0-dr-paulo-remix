@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
-  html?: string | null
+type PatientDocument = {
   html_generated_at?: string | null
   const [htmlCache, setHtmlCache] = useState<Record<string, string>>({})
   const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null)
