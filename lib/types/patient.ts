@@ -1,4 +1,4 @@
-export interface PatientDocument {
+export type PatientDocument = {
   id: string
   patient_id: string
   file_name: string
@@ -9,7 +9,7 @@ export interface PatientDocument {
   pdf_url?: string | null
 }
 
-export interface Patient {
+export type Patient = {
   id: string
   full_name: string
   email: string | null
@@ -19,7 +19,7 @@ export interface Patient {
   documents?: PatientDocument[]
 }
 
-export interface UploadResult {
+export type UploadResult = {
   cleanText: string
   credentials?: {
     loginName?: string
