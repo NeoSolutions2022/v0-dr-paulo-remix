@@ -41,10 +41,21 @@ HTML mínimo esperado:
   </div>
 </body>
 </html>
-        responseMimeType: "text/plain",
-    return NextResponse.json({
-      html: sanitizedHtml,
-      debug: {
+type GeminiResponse = {
+  rawText: string
+  finishReason?: string | null
+  safetyRatings?: unknown
+}
+
+async function callGemini(cleanText: string, apiKey: string): Promise<GeminiResponse> {
+  const candidate = payload?.candidates?.[0]
+  const parts = candidate?.content?.parts
+    : candidate?.content?.text || ""
+  return {
+    rawText,
+    finishReason: candidate?.finishReason ?? null,
+    safetyRatings: candidate?.safetyRatings ?? null,
+  }
         raw: rawGeminiText,
         rawLength: rawGeminiText.length,
       },
@@ -55,3 +66,14 @@ HTML mínimo esperado:
 }
     console.error("Erro ao interpretar HTML do Gemini", {
   const sanitizedHtml = sanitizeHtml(rawGeminiText)
+  let finishReason: string | null | undefined
+  let safetyRatings: unknown
+    const geminiResponse = await callGemini(document.clean_text, apiKey)
+    rawGeminiText = geminiResponse.rawText
+    finishReason = geminiResponse.finishReason
+    safetyRatings = geminiResponse.safetyRatings
+        finishReason,
+      finishReason,
+      safetyRatings,
+        finishReason,
+        safetyRatings,
