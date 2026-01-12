@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
-import type { Patient, PatientDocument, UploadResult } from "@/lib/types/patient"
+import { type Patient, type PatientDocument, type UploadResult } from "@/lib/types/patient"
   ListChecks,
 
 interface Patient {
