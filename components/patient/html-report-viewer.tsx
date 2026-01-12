@@ -17,5 +17,5 @@ export default function HtmlReportViewer({ html }: HtmlReportViewerProps) {
     )
   }
 
-  return <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
+  return <div className="max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
 }

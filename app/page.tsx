@@ -11,6 +11,12 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
+  html?: string | null
+  html_generated_at?: string | null
+  const [htmlCache, setHtmlCache] = useState<Record<string, string>>({})
+  const [htmlLoadingId, setHtmlLoadingId] = useState<string | null>(null)
+  const [htmlErrors, setHtmlErrors] = useState<Record<string, string>>({})
+import HtmlReportViewer from "@/components/patient/html-report-viewer"
 import {
   AlertCircle,
   CheckCircle2,
@@ -231,6 +237,37 @@ export default function AdminHomePage() {
 
     const text = await file.text()
     setUploadFileName(file.name)
+  const fetchHtmlReport = async (documentId: string, force = false) => {
+    setHtmlLoadingId(documentId)
+    setHtmlErrors((prev) => ({ ...prev, [documentId]: "" }))
+    try {
+      const response = await fetch(`/api/documents/${documentId}/generate-html`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao gerar HTML")
+      }
+      setHtmlCache((prev) => ({ ...prev, [documentId]: data.html }))
+      return data.html as string
+    } catch (err: any) {
+      setHtmlErrors((prev) => ({ ...prev, [documentId]: err.message || "Erro ao gerar HTML" }))
+      return ""
+    } finally {
+      setHtmlLoadingId(null)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedDocument?.id) return
+    const existingHtml = selectedDocument.html || htmlCache[selectedDocument.id]
+    if (!existingHtml && htmlLoadingId !== selectedDocument.id) {
+      fetchHtmlReport(selectedDocument.id)
+    }
+  }, [selectedDocument?.id, selectedDocument?.html, htmlCache, htmlLoadingId])
+
     setUploadText(text)
     setUploadResult(null)
   }
@@ -461,27 +498,31 @@ export default function AdminHomePage() {
                   <div className="space-y-2">
                     <Label htmlFor="full_name">Nome completo</Label>
                     <Input
-                      id="full_name"
-                      value={selectedPatient?.full_name || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
-                          prev.map((patient) =>
-                            patient.id === selectedPatient?.id
-                              ? { ...patient, full_name: event.target.value }
-                              : patient,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={selectedPatient?.email || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
+                      <Label>Relatório HTML</Label>
+                      {loadingPatients ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Carregando relatório...
+                        </div>
+                      ) : (
+                        <HtmlReportViewer html={selectedDocument.html || htmlCache[selectedDocument.id]} />
+                      )}
+                      {htmlErrors[selectedDocument.id] && (
+                        <p className="text-sm text-destructive">{htmlErrors[selectedDocument.id]}</p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => fetchHtmlReport(selectedDocument.id, true)}
+                        className="w-full md:w-auto"
+                        disabled={htmlLoadingId === selectedDocument.id}
+                      >
+                        {htmlLoadingId === selectedDocument.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Regenerar HTML
+                      </Button>
                           prev.map((patient) =>
                             patient.id === selectedPatient?.id
                               ? { ...patient, email: event.target.value }
