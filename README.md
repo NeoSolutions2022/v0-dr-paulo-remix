@@ -22,6 +22,12 @@ Continue building your app on:
 
 **[https://v0.app/chat/m2DkQ2PXDon](https://v0.app/chat/m2DkQ2PXDon)**
 
+## Environment Variables
+
+Set the following environment variable when running the Docker image to enable the Gemini integration for medical report HTML generation:
+
+- `GOOGLE_GEMINI_API_KEY=xxxxxxxx`
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)

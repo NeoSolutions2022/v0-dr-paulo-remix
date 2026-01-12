@@ -25,6 +25,7 @@ import {
   Users,
   ListChecks,
 } from "lucide-react"
+import { sanitizeHtml } from "@/lib/html-sanitizer"
 
 interface PatientDocument {
   id: string
@@ -33,6 +34,7 @@ interface PatientDocument {
   created_at: string
   clean_text: string | null
   pdf_url?: string | null
+  html?: string | null
 }
 
 interface Patient {
@@ -73,6 +75,9 @@ export default function AdminHomePage() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
+  const [htmlLoading, setHtmlLoading] = useState(false)
+  const [htmlError, setHtmlError] = useState("")
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -84,6 +89,8 @@ export default function AdminHomePage() {
     () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
     [selectedDocumentId, selectedPatient],
   )
+
+  const sanitizedHtml = useMemo(() => (htmlPreview ? sanitizeHtml(htmlPreview) : ""), [htmlPreview])
 
   useEffect(() => {
     const verifySession = async () => {
@@ -161,6 +168,61 @@ export default function AdminHomePage() {
       setSavingPatient(false)
     }
   }
+
+  const fetchDocumentHtml = async (force = false) => {
+    if (!selectedDocument) return
+    setHtmlLoading(true)
+    setHtmlError("")
+
+    try {
+      const response = await fetch(
+        `/api/documents/${selectedDocument.id}/generate-html${force ? "?force=true" : ""}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force }),
+        },
+      )
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao gerar HTML")
+      }
+
+      const nextHtml = typeof data.html === "string" ? data.html : ""
+      setHtmlPreview(nextHtml || null)
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === selectedPatient?.id
+            ? {
+                ...patient,
+                documents: patient.documents?.map((doc) =>
+                  doc.id === selectedDocument.id ? { ...doc, html: nextHtml } : doc,
+                ),
+              }
+            : patient,
+        ),
+      )
+    } catch (err: any) {
+      setHtmlError(err.message || "Erro ao carregar HTML")
+    } finally {
+      setHtmlLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!selectedDocument) {
+      setHtmlPreview(null)
+      return
+    }
+
+    const cachedHtml = selectedDocument.html?.trim() ? selectedDocument.html : null
+    setHtmlPreview(cachedHtml)
+
+    if (!cachedHtml) {
+      fetchDocumentHtml(false)
+    }
+  }, [selectedDocument])
 
   const handleDocumentUpdate = async (changes: Partial<PatientDocument>) => {
     if (!selectedDocument) return
@@ -543,6 +605,60 @@ export default function AdminHomePage() {
                       >
                         <Clipboard className="mr-2 h-4 w-4" /> Copiar texto
                       </Button>
+                    </div>
+
+                    <div className="space-y-2 pt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label>Relatório HTML estilizado</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchDocumentHtml(true)}
+                          disabled={htmlLoading}
+                        >
+                          {htmlLoading ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4" /> Regenerar HTML
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {htmlError && (
+                        <Alert variant="destructive">
+                          <AlertDescription>{htmlError}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      {!htmlError && htmlLoading && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Gerando relatório estilizado...
+                        </div>
+                      )}
+
+                      {!htmlLoading && !htmlError && !htmlPreview && (
+                        <p className="text-sm text-muted-foreground">
+                          Relatório HTML ainda não foi gerado.
+                        </p>
+                      )}
+
+                      {!htmlLoading && htmlPreview && (
+                        <div className="border rounded-lg overflow-hidden">
+                          <iframe
+                            title="Relatório médico HTML"
+                            className="w-full min-h-[640px]"
+                            sandbox=""
+                            referrerPolicy="no-referrer"
+                            srcDoc={sanitizedHtml}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
