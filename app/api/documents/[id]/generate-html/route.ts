@@ -322,6 +322,13 @@ export async function POST(
   let rawGeminiText = ""
   try {
     rawGeminiText = await callGemini(document.clean_text, apiKey)
+    if (debug && isAdmin) {
+      console.log("[gemini] raw output", {
+        documentId,
+        rawLength: rawGeminiText.length,
+        raw: rawGeminiText,
+      })
+    }
     structured = parseGeminiJson(rawGeminiText)
   } catch (error: any) {
     const message =
@@ -340,7 +347,11 @@ export async function POST(
       hasJsonObject: rawGeminiText.includes("{") && rawGeminiText.includes("}"),
     }
 
-    console.error("Erro ao interpretar JSON do Gemini", { error, ...debugInfo })
+    console.error("Erro ao interpretar JSON do Gemini", {
+      error,
+      ...debugInfo,
+      raw: debug ? rawGeminiText : undefined,
+    })
 
     if (debug && isAdmin) {
       return NextResponse.json(
