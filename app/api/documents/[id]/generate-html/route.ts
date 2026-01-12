@@ -103,13 +103,15 @@ async function callGemini(cleanText: string, apiKey: string) {
   return rawText
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id: documentId } = await params
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY
   if (!apiKey) {
     return NextResponse.json({ error: "Missing GOOGLE_GEMINI_API_KEY" }, { status: 500 })
   }
-
-  const documentId = params.id
   if (!documentId || documentId === "undefined") {
     return NextResponse.json({ error: "Documento inválido" }, { status: 400 })
   }
