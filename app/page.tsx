@@ -11,26 +11,25 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
-import { type Patient, type PatientDocument, type UploadResult } from "@/lib/types/patient"
   ListChecks,
 
-interface Patient {
-  id: string
-  full_name: string
-  email: string | null
-  birth_date: string | null
-  created_at?: string
-  updated_at?: string
-  documents?: PatientDocument[]
-}
+  const [patients, setPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const [selectedDocumentId, setSelectedDocumentId] = useState(null)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [htmlCache, setHtmlCache] = useState({})
+  const [htmlLoadingId, setHtmlLoadingId] = useState(null)
+  const [htmlErrors, setHtmlErrors] = useState({})
+    } catch (err) {
+  const handlePatientUpdate = async (formData) => {
 
-interface UploadResult {
-  cleanText: string
-  credentials?: {
-    loginName?: string
-    password?: string
-    existing?: boolean
-  }
+    } catch (err) {
+  const handleDocumentUpdate = async (changes) => {
+    } catch (err) {
+  const handleFileUpload = async (event) => {
+    } catch (err) {
+  const fetchHtmlReport = async (documentId, force = false) => {
+    } catch (err) {
   message?: string
   patient?: Patient
   document?: PatientDocument
