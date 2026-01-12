@@ -76,13 +76,47 @@ function stripTrailingCommas(input: string) {
   return input.replace(/,\s*([}\]])/g, "$1")
 }
 
-function extractFirstJsonObject(input: string) {
+function extractBalancedJsonObject(input: string) {
   const startIndex = input.indexOf("{")
-  const endIndex = input.lastIndexOf("}")
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return null
+  if (startIndex === -1) return null
+
+  let inString = false
+  let escapeNext = false
+  let depth = 0
+
+  for (let i = startIndex; i < input.length; i += 1) {
+    const char = input[i]
+
+    if (escapeNext) {
+      escapeNext = false
+      continue
+    }
+
+    if (char === "\\") {
+      if (inString) {
+        escapeNext = true
+      }
+      continue
+    }
+
+    if (char === "\"") {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+
+    if (char === "{") {
+      depth += 1
+    } else if (char === "}") {
+      depth -= 1
+      if (depth === 0) {
+        return input.slice(startIndex, i + 1)
+      }
+    }
   }
-  return input.slice(startIndex, endIndex + 1)
+
+  return null
 }
 
 function parseGeminiJson(rawText: string) {
@@ -90,7 +124,7 @@ function parseGeminiJson(rawText: string) {
   attempts.push(rawText)
   attempts.push(stripMarkdownFences(rawText))
 
-  const extracted = extractFirstJsonObject(rawText)
+  const extracted = extractBalancedJsonObject(rawText)
   if (extracted) {
     attempts.push(extracted)
   }
