@@ -12,7 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import HtmlReportViewer from "@/components/patient/html-report-viewer"
 import type { Patient, PatientDocument, UploadResult } from "@/lib/types/patient"
-}
+  ListChecks,
 
 interface Patient {
   id: string
