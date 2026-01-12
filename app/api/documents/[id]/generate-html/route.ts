@@ -346,7 +346,7 @@ export async function POST(
           error: message,
           debug: {
             ...debugInfo,
-            preview: rawGeminiText.slice(0, 800),
+            raw: rawGeminiText,
           },
         },
         { status: 502 },
@@ -374,6 +374,17 @@ export async function POST(
   if (updateError) {
     console.error("Erro ao salvar HTML do documento", updateError)
     return NextResponse.json({ error: "Não foi possível salvar o HTML" }, { status: 500 })
+  }
+
+  if (debug && isAdmin) {
+    return NextResponse.json({
+      html: sanitizedHtml,
+      structured,
+      debug: {
+        raw: rawGeminiText,
+        rawLength: rawGeminiText.length,
+      },
+    })
   }
 
   return NextResponse.json({ html: sanitizedHtml })
