@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from "@/lib/admin-auth"
 import { sanitizeHtml } from "@/lib/html-sanitizer"
-import { renderMedicalReportHtml, StructuredMedicalReport } from "@/lib/medical-report"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import crypto from "crypto"
@@ -16,195 +15,20 @@ const GEMINI_ENDPOINT =
 const geminiPrompt = `
 Você receberá um texto clínico bruto (clean_text). Ele pode ter muitas seções e formatos.
 
-RETORNE SOMENTE UM JSON VÁLIDO (sem markdown, sem comentários). Não invente dados.
-Se não puder extrair algo com segurança, use "" ou null.
+RETORNE SOMENTE HTML (sem markdown, sem comentários). Não invente dados.
+Se não puder extrair algo com segurança, use "" ou omita a informação.
 
 OBJETIVO:
-- Extrair o máximo de estrutura possível.
-- Qualquer conteúdo que não se encaixe claramente deve ir para "sections" para não perder informação.
-- Inclua também "raw_text_clean" como fallback com o texto limpo completo (sem comandos RTF).
-
-FORMATO OBRIGATÓRIO DO JSON:
-{
-  "patient": { "codigo": "", "nome": "", "nascimento": "", "telefone": "" },
-  "evolucoes": [
-    {
-      "datetime": "",
-      "title": "Evolução",
-      "summary": "",
-      "ipss": {
-        "items": [ { "label": "", "score": null } ],
-        "qualidade_vida": null,
-        "total": null
-      },
-      "sections": [
-        { "title": "", "kind": "kv", "items": [ { "k": "", "v": "" } ] },
-        { "title": "", "kind": "text", "text": "" }
-      ],
-      "full_text": ""
-    }
-  ],
-  "global_sections": [
-    { "title": "", "kind": "kv", "items": [ { "k": "", "v": "" } ] },
-    { "title": "", "kind": "text", "text": "" }
-  ],
-  "raw_text_clean": ""
-}
+- Gerar um relatório médico HTML bonito, moderno e consistente.
+- Usar cards, timeline vertical, accordions (<details>/<summary>), badges e ícones SVG inline.
+- Incluir um bloco final "Texto completo" com <pre> do texto limpo.
 
 REGRAS:
-- "sections.kind" pode ser apenas: "kv" ou "text".
-- Não exclua dados. Se não conseguir categorizar, crie uma section "Outros" com kind "text".
-- "evolucoes" deve ser uma lista; se detectar duplicadas idênticas, deduplicar.
-- Se houver IPSS, preencher ipss.items com label e score; se não houver, usar score null.
-- "raw_text_clean" deve remover lixo RTF e caracteres estranhos; manter legível.
+- HTML auto-contido com <style> interno.
+- PROIBIDO: scripts, iframes, object, embed, links externos, imagens externas, fontes externas.
+- Sem bibliotecas externas.
+- Responsivo (mobile/desktop).
 `
-
-function stripMarkdownFences(input: string) {
-  return input
-    .replace(/```json/gi, "```")
-    .replace(/```/g, "")
-    .trim()
-}
-
-function normalizeQuotes(input: string) {
-  return input
-    .replace(/\uFEFF/g, "")
-    .replace(/[\u201C\u201D]/g, "\"")
-    .replace(/[\u2018\u2019]/g, "'")
-}
-
-function stripJsonComments(input: string) {
-  return input
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\/\/[^\n\r]*/g, "")
-    .trim()
-}
-
-function escapeNewlinesInStrings(input: string) {
-  let inString = false
-  let escapeNext = false
-  let result = ""
-
-  for (let i = 0; i < input.length; i += 1) {
-    const char = input[i]
-
-    if (escapeNext) {
-      result += char
-      escapeNext = false
-      continue
-    }
-
-    if (char === "\\") {
-      if (inString) {
-        escapeNext = true
-      }
-      result += char
-      continue
-    }
-
-    if (char === "\"") {
-      inString = !inString
-      result += char
-      continue
-    }
-
-    if (inString && (char === "\n" || char === "\r")) {
-      if (char === "\r" && input[i + 1] === "\n") {
-        i += 1
-      }
-      result += "\\n"
-      continue
-    }
-
-    if (char < " " && char !== "\t" && char !== "\n" && char !== "\r") {
-      continue
-    }
-
-    result += char
-  }
-
-  return result
-}
-
-function stripTrailingCommas(input: string) {
-  return input.replace(/,\s*([}\]])/g, "$1")
-}
-
-function extractBalancedJsonObject(input: string) {
-  const startIndex = input.indexOf("{")
-  if (startIndex === -1) return null
-
-  let inString = false
-  let escapeNext = false
-  let depth = 0
-
-  for (let i = startIndex; i < input.length; i += 1) {
-    const char = input[i]
-
-    if (escapeNext) {
-      escapeNext = false
-      continue
-    }
-
-    if (char === "\\") {
-      if (inString) {
-        escapeNext = true
-      }
-      continue
-    }
-
-    if (char === "\"") {
-      inString = !inString
-      continue
-    }
-
-    if (inString) continue
-
-    if (char === "{") {
-      depth += 1
-    } else if (char === "}") {
-      depth -= 1
-      if (depth === 0) {
-        return input.slice(startIndex, i + 1)
-      }
-    }
-  }
-
-  return null
-}
-
-function parseGeminiJson(rawText: string) {
-  const attempts: string[] = []
-  const normalized = normalizeQuotes(rawText)
-  attempts.push(normalized)
-  attempts.push(stripMarkdownFences(normalized))
-
-  const extracted = extractBalancedJsonObject(normalized)
-  if (extracted) {
-    attempts.push(extracted)
-  }
-
-  const cleanedAttempts = attempts.flatMap((attempt) => {
-    const noComments = stripJsonComments(attempt)
-    const noTrailing = stripTrailingCommas(noComments)
-    return [
-      noComments,
-      noTrailing,
-      escapeNewlinesInStrings(noComments),
-      escapeNewlinesInStrings(noTrailing),
-    ]
-  })
-
-  for (const candidate of cleanedAttempts) {
-    try {
-      return JSON.parse(candidate) as StructuredMedicalReport
-    } catch {
-      continue
-    }
-  }
-
-  throw new Error("Invalid JSON response")
-}
 
 async function callGemini(cleanText: string, apiKey: string) {
   const promptFinal = `${geminiPrompt}\n\nEntrada (clean_text):\n${cleanText}`
@@ -221,7 +45,7 @@ async function callGemini(cleanText: string, apiKey: string) {
         temperature: 0.2,
         topP: 0.9,
         maxOutputTokens: 8192,
-        responseMimeType: "application/json",
+        responseMimeType: "text/html",
       },
     }),
   })
@@ -318,7 +142,6 @@ export async function POST(
     return NextResponse.json({ error: "Documento sem clean_text" }, { status: 400 })
   }
 
-  let structured: StructuredMedicalReport
   let rawGeminiText = ""
   try {
     rawGeminiText = await callGemini(document.clean_text, apiKey)
@@ -329,7 +152,6 @@ export async function POST(
         raw: rawGeminiText,
       })
     }
-    structured = parseGeminiJson(rawGeminiText)
   } catch (error: any) {
     const message =
       error?.message === "Gemini returned empty content"
@@ -347,7 +169,7 @@ export async function POST(
       hasJsonObject: rawGeminiText.includes("{") && rawGeminiText.includes("}"),
     }
 
-    console.error("Erro ao interpretar JSON do Gemini", {
+    console.error("Erro ao interpretar HTML do Gemini", {
       error,
       ...debugInfo,
       raw: debug ? rawGeminiText : undefined,
@@ -369,15 +191,7 @@ export async function POST(
     return NextResponse.json({ error: message }, { status: 502 })
   }
 
-  if (!structured.raw_text_clean?.trim()) {
-    structured = {
-      ...structured,
-      raw_text_clean: document.clean_text,
-    }
-  }
-
-  const renderedHtml = renderMedicalReportHtml(structured)
-  const sanitizedHtml = sanitizeHtml(renderedHtml)
+  const sanitizedHtml = sanitizeHtml(rawGeminiText)
 
   const { error: updateError } = await admin
     .from("documents")
@@ -392,7 +206,6 @@ export async function POST(
   if (debug && isAdmin) {
     return NextResponse.json({
       html: sanitizedHtml,
-      structured,
       debug: {
         raw: rawGeminiText,
         rawLength: rawGeminiText.length,
