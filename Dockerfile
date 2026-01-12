@@ -27,6 +27,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV GOOGLE_GEMINI_API_KEY=xxxxxxxx
 
 # Create non-root user
 RUN addgroup -S app && adduser -S app -G app

@@ -9,6 +9,7 @@ services:
       - "5000:5000"
     environment:
       - MODEL=mistral-7b-instruct-v0.1.Q4_0.gguf
+      - GOOGLE_GEMINI_API_KEY=xxxxxxxx
     volumes:
       - gpt4all-models:/root/.cache/gpt4all
     restart: unless-stopped

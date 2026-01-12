@@ -11,6 +11,7 @@ interface PatientDocument {
   pdf_url: string | null
   clean_text: string | null
   hash_sha256: string | null
+  html?: string | null
 }
 
 export const dynamic = "force-dynamic"
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   const documentId = searchParams.get("id")
 
   const baseSelect =
-    "id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256"
+    "id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256, html"
 
   // Quando um ID específico é informado, buscamos primeiro o documento e
   // validamos se pertence ao usuário autenticado. Assim evitamos `null`
