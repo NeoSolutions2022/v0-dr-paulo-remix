@@ -65,6 +65,13 @@ function stripMarkdownFences(input: string) {
     .trim()
 }
 
+function normalizeQuotes(input: string) {
+  return input
+    .replace(/\uFEFF/g, "")
+    .replace(/[\u201C\u201D]/g, "\"")
+    .replace(/[\u2018\u2019]/g, "'")
+}
+
 function stripJsonComments(input: string) {
   return input
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -121,10 +128,11 @@ function extractBalancedJsonObject(input: string) {
 
 function parseGeminiJson(rawText: string) {
   const attempts: string[] = []
-  attempts.push(rawText)
-  attempts.push(stripMarkdownFences(rawText))
+  const normalized = normalizeQuotes(rawText)
+  attempts.push(normalized)
+  attempts.push(stripMarkdownFences(normalized))
 
-  const extracted = extractBalancedJsonObject(rawText)
+  const extracted = extractBalancedJsonObject(normalized)
   if (extracted) {
     attempts.push(extracted)
   }
@@ -175,7 +183,7 @@ async function callGemini(cleanText: string, apiKey: string) {
   const parts = payload?.candidates?.[0]?.content?.parts
   const rawText = Array.isArray(parts)
     ? parts.map((part: { text?: string }) => (typeof part?.text === "string" ? part.text : "")).join("")
-    : ""
+    : payload?.candidates?.[0]?.content?.text || ""
   if (!rawText || typeof rawText !== "string" || !rawText.trim()) {
     throw new Error("Gemini returned empty content")
   }
