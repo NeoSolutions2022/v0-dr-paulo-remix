@@ -268,13 +268,13 @@ export async function POST(
   const debugParam = request.nextUrl.searchParams.get("debug")
   const force =
     forceParam === "true" || body?.force === true || body?.force === "true"
+
+  const adminCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value
+  const isAdmin = hasValidAdminSession(adminCookie)
   const debug =
     debugParam === "false" || body?.debug === false || body?.debug === "false"
       ? false
       : isAdmin
-
-  const adminCookie = request.cookies.get(ADMIN_SESSION_COOKIE)?.value
-  const isAdmin = hasValidAdminSession(adminCookie)
 
   let userId: string | null = null
   if (!isAdmin) {
