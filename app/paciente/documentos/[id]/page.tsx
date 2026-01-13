@@ -8,10 +8,9 @@ import { Calendar, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
+import { HtmlDocumentViewer } from "@/components/patient/html-document-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { createClient } from "@/lib/supabase/client"
-import { sanitizeHtml } from "@/lib/html-sanitizer"
 
 type PatientDocument = {
   id: string
@@ -33,18 +32,10 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
   const { id } = params
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
-  const sanitizedHtml = useMemo(() => (htmlPreview ? sanitizeHtml(htmlPreview) : ""), [htmlPreview])
-
   const [document, setDocument] = useState<PatientDocument | null>(null)
   const [patient, setPatient] = useState<PatientInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null)
-  const [shouldGeneratePdf, setShouldGeneratePdf] = useState(false)
-  const [generationRequestId, setGenerationRequestId] = useState(0)
-  const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
-  const [htmlLoading, setHtmlLoading] = useState(false)
-  const [htmlError, setHtmlError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -112,9 +103,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           return
         }
 
-        setGeneratedPdfUrl(null)
-        setShouldGeneratePdf(false)
-        setGenerationRequestId(0)
         setDocument(documentData)
       } catch (err: any) {
         console.error("Erro ao carregar documento do paciente", err)
@@ -126,37 +114,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
     loadData()
   }, [id, router, supabase])
-
-  useEffect(() => {
-    const loadHtml = async () => {
-      if (!document) return
-      const cachedHtml = document.html?.trim() ? document.html : null
-      setHtmlPreview(cachedHtml)
-      setHtmlError(null)
-
-      if (cachedHtml) return
-
-      try {
-        setHtmlLoading(true)
-        const response = await fetch(`/api/documents/${document.id}/generate-html`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        })
-        const data = await response.json()
-        if (!response.ok) {
-          throw new Error(data.error || "Falha ao gerar HTML")
-        }
-        setHtmlPreview(typeof data.html === "string" ? data.html : null)
-      } catch (err: any) {
-        console.error("Erro ao gerar HTML do relatório", err)
-        setHtmlError(err.message || "Não foi possível gerar o HTML do relatório.")
-      } finally {
-        setHtmlLoading(false)
-      }
-    }
-
-    loadHtml()
-  }, [document])
 
   const hasCpf = !!patient?.cpf
 
@@ -192,24 +149,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => {
-              setGeneratedPdfUrl(null)
-              setShouldGeneratePdf(true)
-              setGenerationRequestId((prev) => prev + 1)
-            }}
-          >
-            Visualizar
-          </Button>
-          {generatedPdfUrl && (
-            <Button asChild variant="outline" size="sm">
-              <Link href={generatedPdfUrl} download target="_blank">
-                Download PDF
-              </Link>
-            </Button>
-          )}
           <Button asChild variant="outline" size="sm">
             <Link href="/paciente/documentos">Voltar</Link>
           </Button>
@@ -231,15 +170,7 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             </div>
           )}
 
-          <ProcessedDocumentViewer
-            cleanText={document.clean_text}
-            fileName={document.file_name}
-            documentId={document.id}
-            patientName={patient?.full_name}
-            shouldGenerate={shouldGeneratePdf}
-            triggerKey={generationRequestId}
-            onPdfReady={setGeneratedPdfUrl}
-          />
+          <HtmlDocumentViewer html={document.html} fileName={document.file_name} />
 
           {document.hash_sha256 && (
             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -266,45 +197,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Relatório HTML estilizado</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {htmlError && (
-            <Alert variant="destructive">
-              <AlertDescription className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                {htmlError}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {!htmlError && htmlLoading && (
-            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <Loader2 className="h-4 w-4 animate-spin" /> Gerando relatório estilizado...
-            </div>
-          )}
-
-          {!htmlLoading && !htmlError && !htmlPreview && (
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Relatório HTML ainda não foi gerado.
-            </p>
-          )}
-
-          {!htmlLoading && htmlPreview && (
-            <div className="border rounded-lg overflow-hidden">
-              <iframe
-                title="Relatório médico HTML"
-                className="w-full min-h-[640px]"
-                sandbox=""
-                referrerPolicy="no-referrer"
-                srcDoc={sanitizedHtml}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
