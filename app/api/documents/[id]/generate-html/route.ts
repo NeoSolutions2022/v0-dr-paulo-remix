@@ -899,7 +899,6 @@ REQUISITOS VISUAIS:
   </div>
 </body>
 </html>
-
 `
 
 type GeminiResponse = {
@@ -922,7 +921,7 @@ async function callGemini(cleanText: string, apiKey: string): Promise<GeminiResp
       generationConfig: {
         temperature: 0.2,
         topP: 0.9,
-        maxOutputTokens: 100000,
+        maxOutputTokens: 120000,
         responseMimeType: "text/plain",
       },
     }),
