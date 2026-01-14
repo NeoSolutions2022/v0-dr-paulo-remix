@@ -27,7 +27,7 @@ REQUISITOS VISUAIS:
 - Timeline vertical para evoluções.
 - Accordion para seções extras (usar <details>/<summary>).
 - IPSS: tabela + barras de score feitas em CSS (sem libs).
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -40,7 +40,7 @@ REQUISITOS VISUAIS:
     - "Resumo médico" e "Orientações" podem ser escritos pelo médico.
       Se a IA puder, ela pode preencher com base no texto raw.
     - Seções estruturadas para: Conduta, Cirurgia, Evolução, PSA, Comorbidades, Educação.
-    - IPSS: abre automaticamente ao carregar (se estiver presente).
+    - Sem accordions: tudo sempre visível.
   -->
 
   <style>
@@ -217,8 +217,8 @@ REQUISITOS VISUAIS:
     .editable-block p{margin:0 0 10px 0}
     .editable-block p:last-child{margin-bottom:0}
 
-    /* Details / accordion */
-    details{
+    /* ✅ Static “accordion look” (no buttons / always visible) */
+    .details-static{
       border:1px solid rgba(0,91,255,.18);
       border-radius:14px;
       box-shadow:0 8px 18px rgba(0,0,0,.06);
@@ -226,29 +226,16 @@ REQUISITOS VISUAIS:
       background:#fff;
       margin-top:12px;
     }
-    summary{
+    .details-title{
       padding:16px 18px;
-      cursor:pointer;
       font-weight:900;
       color:var(--primary);
       background:linear-gradient(180deg, rgba(0, 91, 255, 0.10), rgba(0, 91, 255, 0.03));
       border-bottom:1px solid rgba(0,91,255,.14);
-      position:relative;
-      list-style:none;
-      user-select:none;
     }
-    summary::-webkit-details-marker{display:none}
-    summary::after{
-      content:"+";
-      position:absolute;
-      right:16px;
-      top:50%;
-      transform:translateY(-50%);
-      font-size:1.4em;
-      color:rgba(0,91,255,.9);
+    .details-body{
+      padding:14px 18px 18px 18px;
     }
-    details[open] summary::after{content:"-"}
-    details > div{padding:14px 18px 18px 18px}
 
     /* Tables */
     table{
@@ -396,14 +383,6 @@ REQUISITOS VISUAIS:
     .mt-12{margin-top:12px}
     .mt-16{margin-top:16px}
   </style>
-
-  <script>
-    // IPSS: abre automaticamente ao carregar a página, se existir.
-    window.addEventListener('DOMContentLoaded', () => {
-      const ipss = document.querySelector('[data-auto-open="ipss"]');
-      if (ipss && !ipss.open) ipss.open = true;
-    });
-  </script>
 </head>
 
 <body>
@@ -426,9 +405,29 @@ REQUISITOS VISUAIS:
             {{patient_name}} <!-- ex: Paciente Exemplo -->
           </div>
 
-          <div class="doctor-block">
-            <p class="doctor-data"> <small>—  Dr. Paulo Henrique de Moura Reis Rua Padre Valdevino, 2000 - Fortaleza/CE CRM 3497 CE - RQE 1595 - RQE 1594 --></small></p>
+        <div class="doctor-block">
+          <div class="doctor-header">
+            <div class="doctor-name">{{doctor_name}} <!-- ex: Dr. Paulo Henrique de Moura Reis --></div>
+            <div class="doctor-ids">
+              <span class="doctor-id">{{doctor_crm}} <!-- ex: CRM-CE 3497 --></span>
+              <span class="dot">•</span>
+              <span class="doctor-id">{{doctor_rqe_1}} <!-- ex: RQE 1595 --></span>
+              <span class="dot">•</span>
+              <span class="doctor-id">{{doctor_rqe_2}} <!-- ex: RQE 1594 --></span>
+            </div>
           </div>
+
+          <div class="doctor-address">
+            {{clinic_address}} <!-- ex: Rua Padre Valdevino, 2000 — Fortaleza/CE -->
+          </div>
+
+          <div class="doctor-contact">
+            {{clinic_phone}} <!-- ex: (85) 0000-0000 -->
+            <span class="dot">•</span>
+            {{clinic_whatsapp}} <!-- ex: WhatsApp -->
+          </div>
+        </div>
+
         </div>
 
         <div>
@@ -475,20 +474,14 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint"></div>
-        <p>{{commitment_paragraph_1}}
-          <!-- ex: Na Clínica do Dr. Paulo Henrique de Moura, nosso compromisso é com o seu bem-estar. Este relatório foi criado para fornecer uma visão clara e compreensível do seu tratamento e evolução, reforçando a importância de um acompanhamento contínuo e personalizado. -->
-        </p>
-        <p>{{commitment_paragraph_2}}
-          <!-- ex: Seu histórico é único: analisamos cada detalhe do seu prontuário para oferecer um plano de tratamento individualizado. -->
-        </p>
-        <p>{{commitment_paragraph_3}}
-          <!-- ex: Comunicação clara: transformamos dados complexos em informações acessíveis. Foco no bem-estar: nosso objetivo é sua qualidade de vida e longevidade. -->
-        </p>
+        <p>{{commitment_paragraph_1}}</p>
+        <p>{{commitment_paragraph_2}}</p>
+        <p>{{commitment_paragraph_3}}</p>
       </div>
     </div>
 
     <!-- ============================================================
-         RESUMO MÉDICO (resumo)
+         RESUMO MÉDICO
          ============================================================ -->
     <div class="card">
       <div class="section-header">
@@ -500,15 +493,12 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">Resumo médico</div>
-        <p>{{medical_summary}}
-          <!-- ex IA (genérica): Paciente em seguimento urológico por {{diagnosis_main}}, com histórico de {{key_events}}. Evoluiu com {{current_status}}. Plano atual: {{plan_short}}. -->
-        </p>
+        <p>{{medical_summary}}</p>
       </div>
     </div>
 
     <!-- ============================================================
          DISCUSSÃO DA CONDUTA E PLANEJAMENTO TERAPÊUTICO
-         Justificativa clínica + decisão compartilhada
          ============================================================ -->
     <div class="card">
       <div class="section-header">
@@ -520,9 +510,7 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">Justificativa clínica + decisão compartilhada</div>
-        <p>{{therapeutic_discussion}}
-          <!-- ex: Foram consideradas as opções {{options_considered}}. Optou-se por {{chosen_option}} devido a {{clinical_rationale}}. A decisão foi compartilhada com o paciente/família, contemplando preferências, riscos e benefícios. -->
-        </p>
+        <p>{{therapeutic_discussion}}</p>
       </div>
     </div>
 
@@ -539,19 +527,16 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">Descrição cirúrgica (resumo para o paciente)</div>
-        <p>{{surgery_description}}
-          <!-- ex: Em {{surgery_date}}, foi realizado {{procedure_name}}. Técnica: {{technique}}. Achados relevantes: {{findings}}. Intercorrências: {{complications_or_none}}. -->
-        </p>
+        <p>{{surgery_description}}</p>
       </div>
 
-      <details class="mt-12">
-        <summary>Detalhes técnicos (opcional)</summary>
-        <div>
-          <p class="muted">{{surgery_technical_details}}
-            <!-- ex: Acesso, tempo cirúrgico, anatomia, margens, dispositivos, etc. (evitar termos excessivamente técnicos se o objetivo for leigo) -->
-          </p>
+      <!-- ✅ era <details> -->
+      <div class="details-static mt-12">
+        <div class="details-title">Detalhes técnicos (opcional)</div>
+        <div class="details-body">
+          <p class="muted">{{surgery_technical_details}}</p>
         </div>
-      </details>
+      </div>
     </div>
 
     <!-- ============================================================
@@ -567,16 +552,12 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">Resumo objetivo da evolução</div>
-        <p>{{post_treatment_evolution}}
-          <!-- ex: Após o tratamento, o paciente apresentou {{symptoms_change}}. No momento, encontra-se {{current_condition}}. Sintomas urinários: {{urinary_symptoms}}. Função sexual: {{sexual_function}}. Dor/qualidade de vida: {{qol_notes}}. -->
-        </p>
+        <p>{{post_treatment_evolution}}</p>
       </div>
     </div>
 
     <!-- ============================================================
          ACOMPANHAMENTO DO PSA E EXAMES COMPLEMENTARES
-         "A JORNADA DO PSA"
-         - Análise em texto + tabela
          ============================================================ -->
     <div class="card">
       <div class="section-header">
@@ -588,9 +569,7 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">A jornada do PSA — evolução e resposta aos tratamentos</div>
-        <p>{{psa_narrative}}
-          <!-- ex: Observa-se tendência de {{trend}} desde {{start_period}}. O menor valor (nadir) foi {{psa_nadir}} em {{psa_nadir_date}}. A variação após {{treatment_event}} sugere {{interpretation}}. -->
-        </p>
+        <p>{{psa_narrative}}</p>
       </div>
 
       <div class="psa-block mt-16">
@@ -609,13 +588,9 @@ REQUISITOS VISUAIS:
 
         <!-- “Mini gráfico” por barras (opcional, 100% HTML/CSS) -->
         <div class="barlist">
-          <!-- DUPLIQUE este bloco para cada ponto do PSA (ex.: últimos 6-12 exames)
-               width: calc({{value}} / {{psa_scale_max}} * 100%)
-               psa_scale_max: ex 20, 50, 100 (depende do caso)
-          -->
           <div class="baritem">
             <div class="barhead">
-              <span>{{psa_points[0].date}} <!-- ex: 10/10/2024 --></span>
+              <span>{{psa_points[0].date}}</span>
               <span>{{psa_points[0].value}} ng/mL</span>
             </div>
             <div class="barwrap">
@@ -636,14 +611,12 @@ REQUISITOS VISUAIS:
               </div>
             </div>
           </div>
-
-          <!-- ... -->
         </div>
 
-        <!-- Tabela do PSA -->
-        <details class="mt-12" open>
-          <summary>Análise da evolução do PSA (tabela)</summary>
-          <div>
+        <!-- ✅ era <details open> -->
+        <div class="details-static mt-12">
+          <div class="details-title">Análise da evolução do PSA (tabela)</div>
+          <div class="details-body">
             <table>
               <thead>
                 <tr>
@@ -654,7 +627,6 @@ REQUISITOS VISUAIS:
                 </tr>
               </thead>
               <tbody>
-                <!-- DUPLIQUE linhas conforme necessário -->
                 <tr>
                   <td>{{psa_table[0].date}}</td>
                   <td>{{psa_table[0].value}}</td>
@@ -670,15 +642,13 @@ REQUISITOS VISUAIS:
               </tbody>
             </table>
           </div>
-        </details>
+        </div>
 
-        <!-- Exames complementares -->
-        <details class="mt-12">
-          <summary>Exames complementares (imagem, biópsia, anatomopatológico, etc.)</summary>
-          <div>
-            <p class="muted">{{complementary_exams_summary}}
-              <!-- ex: RM próstata (PI-RADS...), biópsia (Gleason/ISUP), cintilografia, PET-PSMA, USG, etc. -->
-            </p>
+        <!-- ✅ era <details> -->
+        <div class="details-static mt-12">
+          <div class="details-title">Exames complementares (imagem, biópsia, anatomopatológico, etc.)</div>
+          <div class="details-body">
+            <p class="muted">{{complementary_exams_summary}}</p>
 
             <table class="mt-12">
               <thead>
@@ -705,7 +675,8 @@ REQUISITOS VISUAIS:
               </tbody>
             </table>
           </div>
-        </details>
+        </div>
+
       </div>
     </div>
 
@@ -722,14 +693,13 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint">Comorbidades + condutas associadas</div>
-        <p>{{comorbidities_management}}
-          <!-- ex: Pressão arterial, diabetes, DPOC, obesidade, saúde mental, sono, atividade física, tabagismo, etc. -->
-        </p>
+        <p>{{comorbidities_management}}</p>
       </div>
 
-      <details class="mt-12">
-        <summary>Lista de comorbidades e controle (opcional)</summary>
-        <div>
+      <!-- ✅ era <details> -->
+      <div class="details-static mt-12">
+        <div class="details-title">Lista de comorbidades e controle (opcional)</div>
+        <div class="details-body">
           <table>
             <thead>
               <tr>
@@ -755,7 +725,7 @@ REQUISITOS VISUAIS:
             </tbody>
           </table>
         </div>
-      </details>
+      </div>
     </div>
 
     <!-- ============================================================
@@ -771,14 +741,13 @@ REQUISITOS VISUAIS:
 
       <div class="editable-block">
         <div class="hint"></div>
-        <p>{{patient_education}}
-          <!-- ex IA (genérica): Manter acompanhamento conforme calendário; sinais de alerta; cuidados com medicação; hábitos saudáveis; quando procurar atendimento; próximos exames e retornos. -->
-        </p>
+        <p>{{patient_education}}</p>
       </div>
 
-      <details class="mt-12">
-        <summary>Plano de acompanhamento (próximos passos)</summary>
-        <div>
+      <!-- ✅ era <details> -->
+      <div class="details-static mt-12">
+        <div class="details-title">Plano de acompanhamento (próximos passos)</div>
+        <div class="details-body">
           <table>
             <thead>
               <tr>
@@ -804,11 +773,11 @@ REQUISITOS VISUAIS:
             </tbody>
           </table>
         </div>
-      </details>
+      </div>
     </div>
 
     <!-- ============================================================
-         IPSS (OPCIONAL) — se existir no caso, abre automaticamente
+         IPSS (OPCIONAL) — sempre visível
          ============================================================ -->
     <div class="card">
       <div class="section-header">
@@ -818,12 +787,11 @@ REQUISITOS VISUAIS:
         <h2>Escalas e questionários (opcional)</h2>
       </div>
 
-      <details data-auto-open="ipss" open>
-        <summary>IPSS — Escala Internacional de Sintomas Prostáticos</summary>
-        <div>
-          <p class="muted">{{ipss_intro}}
-            <!-- ex: Questionário aplicado para avaliar sintomas urinários do trato inferior. -->
-          </p>
+      <!-- ✅ era <details data-auto-open="ipss" open> -->
+      <div class="details-static">
+        <div class="details-title">IPSS — Escala Internacional de Sintomas Prostáticos</div>
+        <div class="details-body">
+          <p class="muted">{{ipss_intro}}</p>
 
           <table>
             <thead>
@@ -890,12 +858,13 @@ REQUISITOS VISUAIS:
             <div class="score-label">0-Ótimo | 1-Bem | 2-Satisfeito | 3-+/- | 4-Insatisfeito | 5-Infeliz | 6-Péssimo</div>
           </div>
         </div>
-      </details>
+      </div>
     </div>
 
   </div>
 </body>
 </html>
+
 `
 
 type GeminiResponse = {
