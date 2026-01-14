@@ -475,9 +475,9 @@ REQUISITOS VISUAIS:
       </div>
 
       <div class="editable-block">
-        <div class="hint">Texto institucional (editável)</div>
+        <div class="hint"></div>
         <p>{{commitment_paragraph_1}}
-          <!-- ex: Na {{clinic_name}}, nosso compromisso é com o seu bem-estar. Este relatório foi criado para fornecer uma visão clara e compreensível do seu tratamento e evolução, reforçando a importância de um acompanhamento contínuo e personalizado. -->
+          <!-- ex: Na Clínica do Dr. Paulo Henrique de Moura, nosso compromisso é com o seu bem-estar. Este relatório foi criado para fornecer uma visão clara e compreensível do seu tratamento e evolução, reforçando a importância de um acompanhamento contínuo e personalizado. -->
         </p>
         <p>{{commitment_paragraph_2}}
           <!-- ex: Seu histórico é único: analisamos cada detalhe do seu prontuário para oferecer um plano de tratamento individualizado. -->
@@ -489,7 +489,7 @@ REQUISITOS VISUAIS:
     </div>
 
     <!-- ============================================================
-         RESUMO MÉDICO (EDITÁVEL + PREENCHIMENTO IA OPCIONAL)
+         RESUMO MÉDICO (resumo)
          ============================================================ -->
     <div class="card">
       <div class="section-header">
@@ -500,7 +500,7 @@ REQUISITOS VISUAIS:
       </div>
 
       <div class="editable-block">
-        <div class="hint">Médico pode escrever aqui (IA pode sugerir versão genérica)</div>
+        <div class="hint">Resumo médico</div>
         <p>{{medical_summary}}
           <!-- ex IA (genérica): Paciente em seguimento urológico por {{diagnosis_main}}, com histórico de {{key_events}}. Evoluiu com {{current_status}}. Plano atual: {{plan_short}}. -->
         </p>
