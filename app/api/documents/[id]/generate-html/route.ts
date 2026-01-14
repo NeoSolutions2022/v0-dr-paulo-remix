@@ -27,7 +27,6 @@ REQUISITOS VISUAIS:
 - Timeline vertical para evoluções.
 - Accordion para seções extras (usar <details>/<summary>).
 - IPSS: tabela + barras de score feitas em CSS (sem libs).
-- Sempre incluir seção final "Texto completo" com <details> e <pre>.
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -39,7 +38,7 @@ REQUISITOS VISUAIS:
     TEMPLATE (SANITIZADO / SEM DADOS SENSÍVEIS)
     - Substitua {{placeholders}} pelos dados reais.
     - "Resumo médico" e "Orientações" podem ser escritos pelo médico.
-      Se a IA puder, ela pode preencher versões genéricas com base no texto raw.
+      Se a IA puder, ela pode preencher com base no texto raw.
     - Seções estruturadas para: Conduta, Cirurgia, Evolução, PSA, Comorbidades, Educação.
     - IPSS: abre automaticamente ao carregar (se estiver presente).
   -->
@@ -771,7 +770,7 @@ REQUISITOS VISUAIS:
       </div>
 
       <div class="editable-block">
-        <div class="hint">Médico pode escrever aqui (IA pode sugerir versão genérica)</div>
+        <div class="hint"></div>
         <p>{{patient_education}}
           <!-- ex IA (genérica): Manter acompanhamento conforme calendário; sinais de alerta; cuidados com medicação; hábitos saudáveis; quando procurar atendimento; próximos exames e retornos. -->
         </p>
