@@ -416,9 +416,9 @@ REQUISITOS VISUAIS:
     <div class="card">
       <div class="hero">
         <div>
-          <div class="kicker">{{clinic_section_title}} <!-- ex: SEU HISTÓRICO CLÍNICO UROLÓGICO --></div>
-          <h1 class="title">{{report_title}} <!-- ex: Relatório de Acompanhamento Personalizado — Uma Visão Clara do Seu Tratamento e Evolução --></h1>
-          <p class="subtitle">{{report_subtitle}} <!-- ex: Documento de apoio para entendimento do tratamento, exames e próximos passos. --></p>
+          <div class="kicker">{{clinic_section_title}} <!--  SEU HISTÓRICO CLÍNICO UROLÓGICO --></div>
+          <h1 class="title">{{report_title}} <!--  Relatório de Acompanhamento Personalizado — Uma Visão Clara do Seu Tratamento e Evolução --></h1>
+          <p class="subtitle">{{report_subtitle}} <!--  Documento de apoio para entendimento do tratamento, exames e próximos passos. --></p>
 
           <div class="pill" title="Identificação do paciente">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -428,9 +428,7 @@ REQUISITOS VISUAIS:
           </div>
 
           <div class="doctor-block">
-            <p class="doctor-line">{{doctor_name}} <small>— {{doctor_specialty}} <!-- ex: Urologista --></small></p>
-            <p class="doctor-cred">{{doctor_credentials}} <!-- ex: CRM {{doctor_crm}} - RQE {{doctor_rqe_1}} - RQE {{doctor_rqe_2}} --></p>
-            <p class="doctor-cred">{{clinic_address}} <!-- ex: Rua Exemplo, 0000 - Cidade/UF --></p>
+            <p class="doctor-data"> <small>—  Dr. Paulo Henrique de Moura Reis Rua Padre Valdevino, 2000 - Fortaleza/CE CRM 3497 CE - RQE 1595 - RQE 1594 --></small></p>
           </div>
         </div>
 
