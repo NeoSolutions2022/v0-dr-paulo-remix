@@ -7,7 +7,7 @@ import { FileText, Eye, Calendar, AlertCircle, Loader2, X } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ProcessedDocumentViewer } from "@/components/patient/processed-document-viewer"
+import { HtmlDocumentViewer } from "@/components/patient/html-document-viewer"
 
 type PatientDocument = {
   id: string
@@ -15,6 +15,7 @@ type PatientDocument = {
   created_at: string
   pdf_url: string | null
   clean_text?: string | null
+  html?: string | null
 }
 
 export default function DocumentListPage() {
@@ -23,7 +24,6 @@ export default function DocumentListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewerDocument, setViewerDocument] = useState<PatientDocument | null>(null)
-  const [viewerTrigger, setViewerTrigger] = useState(0)
 
   const viewerTitle = useMemo(() => {
     if (!viewerDocument) return ''
@@ -137,7 +137,6 @@ export default function DocumentListPage() {
                         size="sm"
                         onClick={() => {
                           setViewerDocument(doc)
-                          setViewerTrigger((prev) => prev + 1)
                         }}
                       >
                         <Eye className="h-4 w-4 mr-1" />
@@ -162,14 +161,6 @@ export default function DocumentListPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setViewerTrigger((prev) => prev + 1)}
-                  disabled={!viewerDocument.clean_text}
-                >
-                  Reprocessar
-                </Button>
-                <Button
                   variant="ghost"
                   size="icon"
                   aria-label="Fechar visualização"
@@ -181,14 +172,7 @@ export default function DocumentListPage() {
             </div>
 
             <div className="flex-1 overflow-hidden p-4">
-              <ProcessedDocumentViewer
-                cleanText={viewerDocument.clean_text}
-                fileName={viewerDocument.file_name}
-                documentId={viewerDocument.id}
-                shouldGenerate={true}
-                triggerKey={viewerTrigger}
-                onPdfReady={() => {}}
-              />
+              <HtmlDocumentViewer html={viewerDocument.html} fileName={viewerDocument.file_name} />
             </div>
           </div>
         </div>
