@@ -417,12 +417,16 @@ export default function AdminHomePage() {
   }
 
   const handleDocumentUpdate = async (changes: Partial<PatientDocument>) => {
-    if (!selectedDocument) return
+    if (!selectedDocument || !isValidUuid(selectedDocument.id)) {
+      setError("Relatório inválido")
+      return
+    }
     setSavingDocument(true)
     setSuccessMessage("")
     setError("")
 
     try {
+      console.info("[admin] Salvando documento", { documentId: selectedDocument.id })
       const response = await fetch(`/api/admin/documents/${selectedDocument.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
