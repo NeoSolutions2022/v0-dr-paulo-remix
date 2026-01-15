@@ -11,6 +11,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id)) {
+    return NextResponse.json({ error: 'Documento inválido' }, { status: 400 })
+  }
+
   const { clean_text, file_name, html } = await request.json()
   const sanitizedHtml = typeof html === 'string' ? sanitizeHtml(html) : undefined
 
