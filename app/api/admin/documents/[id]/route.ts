@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { ADMIN_SESSION_COOKIE, hasValidAdminSession } from '@/lib/admin-auth'
+import { sanitizeHtml } from '@/lib/html-sanitizer'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -10,14 +11,19 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  const { clean_text, file_name } = await request.json()
+  const { clean_text, file_name, html } = await request.json()
+  const sanitizedHtml = typeof html === 'string' ? sanitizeHtml(html) : undefined
 
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('documents')
-    .update({ clean_text, file_name })
+    .update({
+      clean_text,
+      file_name,
+      ...(sanitizedHtml !== undefined ? { html: sanitizedHtml } : {}),
+    })
     .eq('id', params.id)
-    .select('id, patient_id, file_name, clean_text, created_at, pdf_url')
+    .select('id, patient_id, file_name, clean_text, created_at, pdf_url, html')
     .single()
 
   if (error) {
