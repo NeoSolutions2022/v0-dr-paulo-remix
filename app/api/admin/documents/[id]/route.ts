@@ -11,8 +11,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id)) {
-    return NextResponse.json({ error: 'Documento inválido' }, { status: 400 })
+  const documentId = params.id
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)) {
+    console.error('[admin] Documento inválido', {
+      documentId,
+      length: documentId?.length ?? null,
+    })
+    return NextResponse.json({ error: 'Documento inválido', documentId }, { status: 400 })
   }
 
   const { clean_text, file_name, html } = await request.json()
@@ -26,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       file_name,
       ...(sanitizedHtml !== undefined ? { html: sanitizedHtml } : {}),
     })
-    .eq('id', params.id)
+    .eq('id', documentId)
     .select('id, patient_id, file_name, clean_text, created_at, pdf_url, html')
     .single()
 
