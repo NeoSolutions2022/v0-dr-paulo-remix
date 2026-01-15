@@ -86,6 +86,7 @@ export default function AdminHomePage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState("")
+  const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
@@ -265,6 +266,7 @@ export default function AdminHomePage() {
     const document = patient?.documents?.[0]
 
     setPreviewHtml(document?.html?.trim() ? document.html : null)
+    setPreviewDocumentId(document?.id ?? null)
     setPreviewError("")
 
     if (!document || !document.id) {
@@ -312,6 +314,7 @@ export default function AdminHomePage() {
   const handleOpenPreview = async (patientId: string) => {
     setPreviewPatientId(patientId)
     setPreviewHtml(null)
+    setPreviewDocumentId(null)
     setMedicalSummaryError("")
     await loadPreviewHtml(patientId)
   }
@@ -351,8 +354,10 @@ export default function AdminHomePage() {
 
   const handleSaveMedicalSummary = async () => {
     if (!previewPatient || !previewHtml) return
-    const document = previewPatient.documents?.[0]
-    if (!document?.id) {
+    const document = previewDocumentId
+      ? previewPatient.documents?.find((doc) => doc.id === previewDocumentId)
+      : null
+    if (!document?.id || document.id === "undefined") {
       setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
       return
     }
