@@ -263,7 +263,8 @@ export default function AdminHomePage() {
   const loadPreviewHtml = async (patientId: string) => {
     setPreviewLoading(true)
     const patient = patients.find((entry) => entry.id === patientId)
-    const document = patient?.documents?.[0]
+    const document =
+      patient?.documents?.find((doc) => typeof doc.id === "string" && doc.id.trim()) ?? null
 
     setPreviewHtml(document?.html?.trim() ? document.html : null)
     setPreviewDocumentId(document?.id ?? null)
@@ -1064,7 +1065,7 @@ export default function AdminHomePage() {
                         type="button"
                         size="sm"
                         onClick={handleSaveMedicalSummary}
-                        disabled={savingMedicalSummary || !previewHtml}
+                        disabled={savingMedicalSummary || !previewHtml || !previewDocumentId}
                       >
                         {savingMedicalSummary ? (
                           <>
