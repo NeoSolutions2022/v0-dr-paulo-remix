@@ -11,13 +11,21 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
-  const documentId = params.id
+  const pathname = request.nextUrl?.pathname || ''
+  const fallbackId = pathname.split('/').filter(Boolean).pop()
+  const documentId = params.id || fallbackId
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(documentId)) {
     console.error('[admin] Documento inválido', {
       documentId,
+      paramsId: params.id,
+      fallbackId,
+      pathname,
       length: documentId?.length ?? null,
     })
-    return NextResponse.json({ error: 'Documento inválido', documentId }, { status: 400 })
+    return NextResponse.json(
+      { error: 'Documento inválido', documentId, paramsId: params.id, pathname },
+      { status: 400 },
+    )
   }
 
   const { clean_text, file_name, html } = await request.json()
