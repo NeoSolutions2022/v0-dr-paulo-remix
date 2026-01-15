@@ -142,6 +142,10 @@ export default function AdminHomePage() {
     return doctype ? `${doctype}\n${serialized}` : serialized
   }
 
+  const isValidUuid = (value: string | null | undefined) =>
+    !!value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
   useEffect(() => {
     const verifySession = async () => {
       const response = await fetch("/api/admin/session")
@@ -264,13 +268,15 @@ export default function AdminHomePage() {
     setPreviewLoading(true)
     const patient = patients.find((entry) => entry.id === patientId)
     const document =
-      patient?.documents?.find((doc) => typeof doc.id === "string" && doc.id.trim()) ?? null
+      patient?.documents?.find(
+        (doc) => doc.patient_id === patientId && isValidUuid(doc.id),
+      ) ?? null
 
     setPreviewHtml(document?.html?.trim() ? document.html : null)
-    setPreviewDocumentId(document?.id ?? null)
+    setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
     setPreviewError("")
 
-    if (!document || !document.id) {
+    if (!document || !isValidUuid(document.id)) {
       setPreviewError("Nenhum relatório disponível para este paciente.")
       setPreviewLoading(false)
       return
@@ -356,9 +362,11 @@ export default function AdminHomePage() {
   const handleSaveMedicalSummary = async () => {
     if (!previewPatient || !previewHtml) return
     const document = previewDocumentId
-      ? previewPatient.documents?.find((doc) => doc.id === previewDocumentId)
+      ? previewPatient.documents?.find(
+          (doc) => doc.id === previewDocumentId && doc.patient_id === previewPatient.id,
+        )
       : null
-    if (!document?.id || document.id === "undefined") {
+    if (!document?.id || !isValidUuid(document.id)) {
       setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
       return
     }
@@ -1065,7 +1073,12 @@ export default function AdminHomePage() {
                         type="button"
                         size="sm"
                         onClick={handleSaveMedicalSummary}
-                        disabled={savingMedicalSummary || !previewHtml || !previewDocumentId}
+                        disabled={
+                          savingMedicalSummary ||
+                          !previewHtml ||
+                          !previewDocumentId ||
+                          !isValidUuid(previewDocumentId)
+                        }
                       >
                         {savingMedicalSummary ? (
                           <>
