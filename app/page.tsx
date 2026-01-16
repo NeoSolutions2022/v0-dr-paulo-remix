@@ -86,6 +86,10 @@ export default function AdminHomePage() {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState("")
+  const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
+  const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
+  const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
+  const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const uploadSectionId = "admin-upload-section"
 
   const selectedPatient = useMemo(
@@ -107,6 +111,40 @@ export default function AdminHomePage() {
     () => (previewHtml ? sanitizeHtml(previewHtml) : ""),
     [previewHtml],
   )
+
+  const extractMedicalSummary = (html: string) => {
+    if (!html) return ""
+    const document = new DOMParser().parseFromString(html, "text/html")
+    const heading = Array.from(document.querySelectorAll("h2")).find(
+      (node) => node.textContent?.trim().toLowerCase() === "resumo médico",
+    )
+    const summaryParagraph =
+      heading?.closest(".card")?.querySelector(".editable-block p") ??
+      document.querySelector(".editable-block .hint + p")
+    return summaryParagraph?.textContent?.trim() ?? ""
+  }
+
+  const updateMedicalSummaryHtml = (html: string, summary: string) => {
+    if (!html) return html
+    const document = new DOMParser().parseFromString(html, "text/html")
+    const heading = Array.from(document.querySelectorAll("h2")).find(
+      (node) => node.textContent?.trim().toLowerCase() === "resumo médico",
+    )
+    const summaryParagraph =
+      heading?.closest(".card")?.querySelector(".editable-block p") ??
+      document.querySelector(".editable-block .hint + p")
+    if (!summaryParagraph) {
+      return html
+    }
+    summaryParagraph.textContent = summary.trim()
+    const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
+    const serialized = document.documentElement.outerHTML
+    return doctype ? `${doctype}\n${serialized}` : serialized
+  }
+
+  const isValidUuid = (value: string | null | undefined) =>
+    !!value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 
   useEffect(() => {
     const verifySession = async () => {
@@ -229,12 +267,16 @@ export default function AdminHomePage() {
   const loadPreviewHtml = async (patientId: string) => {
     setPreviewLoading(true)
     const patient = patients.find((entry) => entry.id === patientId)
-    const document = patient?.documents?.[0]
+    const document =
+      patient?.documents?.find(
+        (doc) => doc.patient_id === patientId && isValidUuid(doc.id),
+      ) ?? null
 
     setPreviewHtml(document?.html?.trim() ? document.html : null)
+    setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
     setPreviewError("")
 
-    if (!document || !document.id) {
+    if (!document || !isValidUuid(document.id)) {
       setPreviewError("Nenhum relatório disponível para este paciente.")
       setPreviewLoading(false)
       return
@@ -279,6 +321,8 @@ export default function AdminHomePage() {
   const handleOpenPreview = async (patientId: string) => {
     setPreviewPatientId(patientId)
     setPreviewHtml(null)
+    setPreviewDocumentId(null)
+    setMedicalSummaryError("")
     await loadPreviewHtml(patientId)
   }
 
@@ -307,13 +351,82 @@ export default function AdminHomePage() {
     }
   }, [selectedDocument])
 
+  useEffect(() => {
+    if (!previewHtml) {
+      setPreviewMedicalSummary("")
+      return
+    }
+    setPreviewMedicalSummary(extractMedicalSummary(previewHtml))
+  }, [previewHtml])
+
+  const handleSaveMedicalSummary = async () => {
+    if (!previewPatient || !previewHtml) return
+    const document = previewDocumentId
+      ? previewPatient.documents?.find(
+          (doc) => doc.id === previewDocumentId && doc.patient_id === previewPatient.id,
+        )
+      : null
+    if (!document?.id || !isValidUuid(document.id)) {
+      setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
+      return
+    }
+
+    setSavingMedicalSummary(true)
+    setMedicalSummaryError("")
+    setError("")
+    setSuccessMessage("")
+
+    const updatedHtml = updateMedicalSummaryHtml(previewHtml, previewMedicalSummary)
+
+    try {
+      const response = await fetch(`/api/admin/documents/${document.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html: updatedHtml,
+          file_name: document.file_name,
+          clean_text: document.clean_text,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Falha ao atualizar resumo médico")
+      }
+
+      setPreviewHtml(data.document?.html ?? updatedHtml)
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === previewPatient.id
+            ? {
+                ...patient,
+                documents: patient.documents?.map((doc) =>
+                  doc.id === document.id ? data.document : doc,
+                ),
+              }
+            : patient,
+        ),
+      )
+      setSuccessMessage("Resumo médico atualizado com sucesso")
+    } catch (err: any) {
+      setMedicalSummaryError(err.message || "Erro ao atualizar resumo médico")
+    } finally {
+      setSavingMedicalSummary(false)
+    }
+  }
+
   const handleDocumentUpdate = async (changes: Partial<PatientDocument>) => {
-    if (!selectedDocument) return
+    if (!selectedDocument || !isValidUuid(selectedDocument.id)) {
+      setError("Relatório inválido")
+      return
+    }
     setSavingDocument(true)
     setSuccessMessage("")
     setError("")
 
     try {
+      console.info("[admin] Salvando documento", { documentId: selectedDocument.id })
       const response = await fetch(`/api/admin/documents/${selectedDocument.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -956,6 +1069,49 @@ export default function AdminHomePage() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700">Relatório HTML</h3>
                   </div>
+
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm">Resumo médico</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleSaveMedicalSummary}
+                        disabled={
+                          savingMedicalSummary ||
+                          !previewHtml ||
+                          !previewDocumentId ||
+                          !isValidUuid(previewDocumentId)
+                        }
+                      >
+                        {savingMedicalSummary ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
+                          </>
+                        ) : (
+                          <>
+                            <PenSquare className="mr-2 h-4 w-4" /> Salvar resumo
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={previewMedicalSummary}
+                      onChange={(event) => setPreviewMedicalSummary(event.target.value)}
+                      className="min-h-[120px]"
+                      placeholder="Edite o resumo médico..."
+                      disabled={!previewHtml}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Esta edição altera apenas o bloco “Resumo médico” no HTML armazenado.
+                    </p>
+                  </div>
+
+                  {medicalSummaryError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{medicalSummaryError}</AlertDescription>
+                    </Alert>
+                  )}
 
                   {previewError && (
                     <Alert variant="destructive">
