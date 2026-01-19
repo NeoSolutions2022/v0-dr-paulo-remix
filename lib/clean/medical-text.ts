@@ -202,7 +202,11 @@ function normalizeUnicodeChars(text: string, logs: string[]): string {
 function preserveClinicalStructure(text: string, logs: string[]): string {
   log(logs, "Estrutura clínica preservada")
 
-  const lines = text.split("\n")
+  const normalizedText = text.replace(
+    /\s+(Código|Nome|Data de Nascimento|Telefone):/gi,
+    "\n$1:",
+  )
+  const lines = normalizedText.split("\n")
   const sections: {
     ficha: string[]
     psa: string[]
