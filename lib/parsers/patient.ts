@@ -17,7 +17,9 @@ const fichaDateRegex = new RegExp(
   "i",
 )
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
-const fichaNameBirthRegex = /Nome:\s*(.+)\s*[\r\n]+Data de Nascimento:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i
+const fichaNameBirthRegex =
+  /Nome:\s*(.+?)\s*Data\s*de\s*Nascimento:\s*(\d{4}[\/\-\u2010-\u2015\u2212]\d{2}[\/\-\u2010-\u2015\u2212]\d{2}|\d{2}[\/\-\u2010-\u2015\u2212]\d{2}[\/\-\u2010-\u2015\u2212]\d{4}|\d{8})/i
+
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
@@ -50,19 +52,36 @@ export function normalizeBirthDate(raw?: string): string | undefined {
 }
 
 function isValidDate(year: string, month: string, day: string) {
-  const date = new Date(`${year}-${month}-${day}`)
+  const y = Number(year)
+  const m = Number(month)
+  const d = Number(day)
+
+  if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return false
+  if (m < 1 || m > 12) return false
+  if (d < 1 || d > 31) return false
+
+  // Valida usando UTC (não sofre com timezone)
+  const date = new Date(Date.UTC(y, m - 1, d))
   return (
-    date.getFullYear() === Number(year) &&
-    date.getMonth() + 1 === Number(month) &&
-    date.getDate() === Number(day)
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() + 1 === m &&
+    date.getUTCDate() === d
   )
 }
+
 
 export function extractPatientData(text: string): ParsedPatient {
   const missing: string[] = []
   const combinedMatch = text.match(fichaNameBirthRegex)
-  const fullName = combinedMatch?.[1] ? cleanupName(combinedMatch[1]) : extractName(text)
-  const birthDate = combinedMatch?.[2] ? normalizeBirthDate(combinedMatch[2]) : findFirstBirthDate(text)
+  const fullName =
+  combinedMatch?.[1] ? cleanupName(combinedMatch[1]) : extractName(text)
+
+  let birthDate =
+    combinedMatch?.[2] ? normalizeBirthDate(combinedMatch[2]) : undefined
+
+  if (!birthDate) {
+  birthDate = findFirstBirthDate(text)
+  }
 
   if (!birthDate) missing.push("birthDate")
   if (!fullName) missing.push("fullName")
@@ -76,22 +95,41 @@ export function extractPatientData(text: string): ParsedPatient {
 
 function findFirstBirthDate(text: string): string | undefined {
   const headerSection = extractHeaderSection(text)
+
+  console.log("[parser] headerSection (primeiros 200):", headerSection.slice(0, 200))
+  console.log("[parser] headerSection contém 'Nascimento'?", /nasc/i.test(headerSection))
+
   const headerDate = findBirthDateInLines(headerSection)
+  console.log("[parser] headerDate (findBirthDateInLines):", headerDate)
   if (headerDate) return headerDate
 
   const fichaMatch = headerSection.match(fichaDateRegex)
+  console.log("[parser] fichaDateRegex match:", fichaMatch?.[1])
+
   if (fichaMatch?.[1]) {
     const normalized = normalizeBirthDate(fichaMatch[1])
+    console.log("[parser] fichaDateRegex normalized:", normalized)
+    if (normalized) return normalized
+  }
+
+  const single = headerSection.match(dateRegexSingle)
+  console.log("[parser] dateRegexSingle match:", single?.[1])
+  if (single?.[1]) {
+    const normalized = normalizeBirthDate(single[1])
+    console.log("[parser] dateRegexSingle normalized:", normalized)
     if (normalized) return normalized
   }
 
   const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1] ?? m[0])
+  console.log("[parser] allCandidates (primeiros 10):", allCandidates.slice(0, 10))
+
   for (const candidate of allCandidates) {
     const normalized = normalizeBirthDate(candidate)
     if (normalized) return normalized
   }
   return undefined
 }
+
 
 function extractHeaderSection(text: string) {
   const evolutionIndex = text.search(/---\s*Evolu[cç][aã]o/i)

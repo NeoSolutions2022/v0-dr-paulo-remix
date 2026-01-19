@@ -7,10 +7,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
 const DEFAULT_SUPABASE_URL = "https://fhznxprnzdswjzpesgal.supabase.co"
 const DEFAULT_SUPABASE_KEY = "sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5"
-const DEFAULT_SUPABASE_SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ||
-  DEFAULT_SUPABASE_KEY
+const DEFAULT_SUPABASE_SERVICE_KEY = DEFAULT_SUPABASE_KEY
 
 interface ProcessPayload {
   rawText: string
@@ -76,14 +73,17 @@ export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
     const { rawText, sourceName, debugLogin = true } = body
-
+    console.log("[process] rawText recebido:", rawText)
+    console.log("[process] sourceName:", sourceName)
     if (!rawText || typeof rawText !== "string") {
       return NextResponse.json({ error: "rawText é obrigatório e deve ser uma string" }, { status: 400 })
     }
 
     const { cleanText, logs } = cleanMedicalText(rawText)
     const parsed = extractPatientData(cleanText)
-
+    console.log("[process] parsed result:", parsed)
+    console.log("[process] cleanText:", cleanText)
+    console.log("[process] cleanMedicalText logs:", logs)
     if (parsed.missing.length > 0) {
       return NextResponse.json(
         {
