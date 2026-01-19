@@ -75,14 +75,14 @@ async function getOrCreateAuthUser(
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
-    const { rawText, sourceName, debugLogin = true } = body
+    const { rawText, sourceName, debugLogin = true, debug = false } = body
 
     if (!rawText || typeof rawText !== "string") {
       return NextResponse.json({ error: "rawText é obrigatório e deve ser uma string" }, { status: 400 })
     }
 
     const { cleanText, logs } = cleanMedicalText(rawText)
-    const parsed = extractPatientData(cleanText)
+    const parsed = extractPatientData(cleanText, { debug })
 
     if (parsed.missing.length > 0) {
       return NextResponse.json(
@@ -90,6 +90,7 @@ export async function POST(request: Request) {
           cleanText,
           logs,
           missing: parsed.missing,
+          debug: debug ? parsed.debug : undefined,
           error: "Não foi possível extrair nome completo e data de nascimento do relatório",
         },
         { status: 422 },

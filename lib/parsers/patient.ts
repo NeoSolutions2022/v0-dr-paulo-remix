@@ -2,6 +2,20 @@ export interface ParsedPatient {
   birthDate?: string
   fullName?: string
   missing: string[]
+  debug?: PatientParseDebug
+}
+
+interface PatientParseDebug {
+  headerSection: string
+  fichaMatch?: string
+  candidates: string[]
+  birthDateLines: BirthDateLineDebug[]
+}
+
+interface BirthDateLineDebug {
+  line: string
+  match?: string
+  normalized?: string
 }
 
 const dateSeparator = "[\\/\\-\\.\\s\\u2010-\\u2015\\u2212]"
@@ -66,9 +80,10 @@ function isValidDate(year: string, month: string, day: string) {
   )
 }
 
-export function extractPatientData(text: string): ParsedPatient {
+export function extractPatientData(text: string, options?: { debug?: boolean }): ParsedPatient {
   const missing: string[] = []
-  const birthDate = findFirstBirthDate(text)
+  const debug = options?.debug ? createDebugState(text) : undefined
+  const birthDate = findFirstBirthDate(text, debug)
   const fullName = extractName(text)
 
   if (!birthDate) missing.push("birthDate")
@@ -78,21 +93,37 @@ export function extractPatientData(text: string): ParsedPatient {
     birthDate,
     fullName,
     missing,
+    debug: missing.length > 0 ? debug : undefined,
   }
 }
 
-function findFirstBirthDate(text: string): string | undefined {
+function createDebugState(text: string): PatientParseDebug {
   const headerSection = extractHeaderSection(text)
-  const headerDate = findBirthDateInLines(headerSection)
+  const fichaMatch = headerSection.match(fichaDateRegex)?.[1]
+  const candidates = Array.from(text.matchAll(dateRegex))
+    .map((m) => m[1] ?? m[0])
+    .slice(0, 5)
+
+  return {
+    headerSection,
+    fichaMatch,
+    candidates,
+    birthDateLines: [],
+  }
+}
+
+function findFirstBirthDate(text: string, debug?: PatientParseDebug): string | undefined {
+  const headerSection = debug?.headerSection ?? extractHeaderSection(text)
+  const headerDate = findBirthDateInLines(headerSection, debug)
   if (headerDate) return headerDate
 
-  const fichaMatch = headerSection.match(fichaDateRegex)
-  if (fichaMatch?.[1]) {
-    const normalized = normalizeBirthDate(fichaMatch[1])
+  const fichaValue = debug?.fichaMatch ?? headerSection.match(fichaDateRegex)?.[1]
+  if (fichaValue) {
+    const normalized = normalizeBirthDate(fichaValue)
     if (normalized) return normalized
   }
 
-  const allCandidates = Array.from(text.matchAll(dateRegex)).map((m) => m[1] ?? m[0])
+  const allCandidates = debug?.candidates ?? Array.from(text.matchAll(dateRegex)).map((m) => m[1] ?? m[0])
   for (const candidate of allCandidates) {
     const normalized = normalizeBirthDate(candidate)
     if (normalized) return normalized
@@ -108,7 +139,7 @@ function extractHeaderSection(text: string) {
   return text
 }
 
-function findBirthDateInLines(block: string): string | undefined {
+function findBirthDateInLines(block: string, debug?: PatientParseDebug): string | undefined {
   const lines = block.split("\n").map((l) => l.trim()).filter(Boolean)
 
   // Prioritize lines explicitly mentioning birth date
@@ -116,10 +147,15 @@ function findBirthDateInLines(block: string): string | undefined {
     if (!/nasc/i.test(line)) continue
 
     const match = line.match(dateRegexSingle)
-    if (match?.[1]) {
-      const normalized = normalizeBirthDate(match[1])
-      if (normalized) return normalized
+    const normalized = match?.[1] ? normalizeBirthDate(match[1]) : undefined
+    if (debug) {
+      debug.birthDateLines.push({
+        line,
+        match: match?.[1],
+        normalized,
+      })
     }
+    if (normalized) return normalized
   }
 
   // Fallback: first valid date in header block
