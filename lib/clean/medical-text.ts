@@ -167,7 +167,7 @@ function removeRtfGarbage(text: string, logs: string[]): string {
   text = text.replace(/Wingdings;\s*Symbol;/gi, "")
   text = text.replace(/\b(ARIAL|Wingdings|Symbol|Times New Roman)\b\s*;?\s*/gi, "")
 
-  text = text.replace(/\s+/g, " ")
+  text = text.replace(/[ \t]+/g, " ")
 
   return text
 }
