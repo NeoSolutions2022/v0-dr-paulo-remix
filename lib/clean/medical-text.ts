@@ -167,7 +167,7 @@ function removeRtfGarbage(text: string, logs: string[]): string {
   text = text.replace(/Wingdings;\s*Symbol;/gi, "")
   text = text.replace(/\b(ARIAL|Wingdings|Symbol|Times New Roman)\b\s*;?\s*/gi, "")
 
-  text = text.replace(/\s+/g, " ")
+  text = text.replace(/[ \t]+/g, " ")
 
   return text
 }
@@ -202,7 +202,11 @@ function normalizeUnicodeChars(text: string, logs: string[]): string {
 function preserveClinicalStructure(text: string, logs: string[]): string {
   log(logs, "Estrutura clínica preservada")
 
-  const lines = text.split("\n")
+  const normalizedText = text.replace(
+    /\s+(Código|Nome|Data de Nascimento|Telefone):/gi,
+    "\n$1:",
+  )
+  const lines = normalizedText.split("\n")
   const sections: {
     ficha: string[]
     psa: string[]
@@ -343,6 +347,8 @@ export function cleanMedicalText(raw: string): CleanResult {
   }
 
   let text = raw
+
+  text = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n").replace(/\\t/g, "\t")
 
   text = removeRtfGarbage(text, logs)
   text = decodeRtfHex(text, logs)
