@@ -17,6 +17,7 @@ const fichaDateRegex = new RegExp(
   "i",
 )
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
+const fichaNameBirthRegex = /Nome:\s*(.+)\s*[\r\n]+Data de Nascimento:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
@@ -59,8 +60,9 @@ function isValidDate(year: string, month: string, day: string) {
 
 export function extractPatientData(text: string): ParsedPatient {
   const missing: string[] = []
-  const birthDate = findFirstBirthDate(text)
-  const fullName = extractName(text)
+  const combinedMatch = text.match(fichaNameBirthRegex)
+  const fullName = combinedMatch?.[1] ? cleanupName(combinedMatch[1]) : extractName(text)
+  const birthDate = combinedMatch?.[2] ? normalizeBirthDate(combinedMatch[2]) : findFirstBirthDate(text)
 
   if (!birthDate) missing.push("birthDate")
   if (!fullName) missing.push("fullName")
