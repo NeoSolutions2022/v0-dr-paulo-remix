@@ -123,6 +123,12 @@ function findFirstBirthDate(text: string, debug?: PatientParseDebug): string | u
     if (normalized) return normalized
   }
 
+  const fallbackMatch = headerSection.match(/Data de Nascimento:\s*([0-9./\-\s]+)/i)
+  if (fallbackMatch?.[1]) {
+    const normalized = normalizeBirthDate(fallbackMatch[1])
+    if (normalized) return normalized
+  }
+
   const allCandidates = debug?.candidates ?? Array.from(text.matchAll(dateRegex)).map((m) => m[1] ?? m[0])
   for (const candidate of allCandidates) {
     const normalized = normalizeBirthDate(candidate)
