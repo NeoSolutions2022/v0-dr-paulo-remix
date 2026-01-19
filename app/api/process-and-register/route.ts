@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import crypto from "crypto"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
-import { extractPatientData } from "@/lib/parsers/patient"
+import { extractPatientData, normalizeBirthDate } from "@/lib/parsers/patient"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
@@ -94,6 +94,27 @@ function diffTextSnapshot(original: string, current: string) {
   }
 }
 
+function normalizeHeaderText(text: string) {
+  return text
+    .replace(/\s+(Código|Nome|Data de Nascimento|Telefone):/gi, "\n$1:")
+    .replace(/[ \t]+/g, " ")
+    .trim()
+}
+
+function extractPatientFromHeader(text: string) {
+  const normalizedHeader = normalizeHeaderText(text)
+  const nameMatch = normalizedHeader.match(/Nome:\s*([^\n]+)/i)
+  const birthMatch = normalizedHeader.match(/Data de Nascimento:\s*([0-9./\-\s]+)/i)
+
+  const fullName = nameMatch?.[1]?.trim()
+  const birthDate = normalizeBirthDate(birthMatch?.[1])
+
+  return {
+    fullName: fullName || undefined,
+    birthDate,
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
@@ -105,7 +126,14 @@ export async function POST(request: Request) {
 
     const { cleanText, logs } = cleanMedicalText(rawText)
     const cleanTextSnapshot = cleanText
-    const parsed = extractPatientData(cleanTextSnapshot, { debug })
+    const headerParsed = extractPatientFromHeader(cleanTextSnapshot)
+    const parsed =
+      headerParsed.fullName && headerParsed.birthDate
+        ? {
+            ...headerParsed,
+            missing: [] as string[],
+          }
+        : extractPatientData(cleanTextSnapshot, { debug })
     const cleanTextDiff = debug ? diffTextSnapshot(cleanTextSnapshot, cleanText) : undefined
 
     if (parsed.missing.length > 0) {
