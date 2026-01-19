@@ -96,7 +96,7 @@ function createDebugState(): PatientParseDebug {
 
 function splitLines(text: string) {
   return text
-    .split("\n")
+    .split(/\r?\n|\r/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !/^=+$/.test(line))
 }
