@@ -344,6 +344,8 @@ export function cleanMedicalText(raw: string): CleanResult {
 
   let text = raw
 
+  text = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n").replace(/\\t/g, "\t")
+
   text = removeRtfGarbage(text, logs)
   text = decodeRtfHex(text, logs)
   text = normalizeLineBreaks(text, logs)
