@@ -23,7 +23,8 @@ const birthDateLineRegex = /Data\s*de\s*Nascimento\s*[:\-]\s*(.+)/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
-  const trimmed = raw
+  const candidate = raw.match(/(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}|\d{8})/)
+  const trimmed = (candidate?.[1] ?? raw)
     .trim()
     .replace(/[\u2010-\u2015\u2212]/g, "-")
     .replace(/[./]/g, "-")
