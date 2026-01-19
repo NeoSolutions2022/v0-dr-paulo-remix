@@ -6,14 +6,14 @@ export interface ParsedPatient {
 
 const dateSeparator = "[\\/\\-\\.\\s\\u2010-\\u2015\\u2212]"
 const dateRegex = new RegExp(
-  `(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+  `(\\d{4}${dateSeparator}\\d{1,2}${dateSeparator}\\d{1,2}|\\d{1,2}${dateSeparator}\\d{1,2}${dateSeparator}\\d{4}|\\d{8})`,
   "g",
 )
 const dateRegexSingle = new RegExp(
-  `(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+  `(\\d{4}${dateSeparator}\\d{1,2}${dateSeparator}\\d{1,2}|\\d{1,2}${dateSeparator}\\d{1,2}${dateSeparator}\\d{4}|\\d{8})`,
 )
 const fichaDateRegex = new RegExp(
-  `Data\\s*de\\s*Nascimento[^0-9]*(\\d{4}${dateSeparator}\\d{2}${dateSeparator}\\d{2}|\\d{2}${dateSeparator}\\d{2}${dateSeparator}\\d{4}|\\d{8})`,
+  `Data\\s*de\\s*Nascimento[^0-9]*(\\d{4}${dateSeparator}\\d{1,2}${dateSeparator}\\d{1,2}|\\d{1,2}${dateSeparator}\\d{1,2}${dateSeparator}\\d{4}|\\d{8})`,
   "i",
 )
 const fichaNameRegex = /Nome[:\s-]+([^\n]+)/i
@@ -28,9 +28,11 @@ export function normalizeBirthDate(raw?: string): string | undefined {
     .replace(/-+/g, "-")
 
   // yyyy-mm-dd or yyyy/mm/dd
-  const isoMatch = trimmed.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/)
+  const isoMatch = trimmed.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/)
   if (isoMatch) {
-    const [, year, month, day] = isoMatch
+    const [, year, monthRaw, dayRaw] = isoMatch
+    const month = monthRaw.padStart(2, "0")
+    const day = dayRaw.padStart(2, "0")
     if (isValidDate(year, month, day)) return `${year}-${month}-${day}`
     return undefined
   }
@@ -45,10 +47,12 @@ export function normalizeBirthDate(raw?: string): string | undefined {
   }
 
   // dd/mm/yyyy or dd-mm-yyyy
-  const match = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/)
+  const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
   if (!match) return undefined
 
-  const [, day, month, year] = match
+  const [, dayRaw, monthRaw, year] = match
+  const day = dayRaw.padStart(2, "0")
+  const month = monthRaw.padStart(2, "0")
   if (!isValidDate(year, month, day)) return undefined
   return `${year}-${month}-${day}`
 }
