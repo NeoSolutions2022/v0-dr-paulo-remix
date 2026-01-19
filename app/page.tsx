@@ -63,6 +63,13 @@ interface UploadResult {
   document?: PatientDocument
 }
 
+interface UploadQueueItem {
+  fileName: string
+  status: "pending" | "processing" | "success" | "error"
+  result?: UploadResult
+  error?: string
+}
+
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -75,7 +82,10 @@ export default function AdminHomePage() {
   const [uploading, setUploading] = useState(false)
   const [uploadFileName, setUploadFileName] = useState("")
   const [uploadText, setUploadText] = useState("")
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -467,18 +477,28 @@ export default function AdminHomePage() {
     }
   }
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length === 0) return
 
-    const text = await file.text()
-    setUploadFileName(file.name)
-    setUploadText(text)
+    setUploadFiles(files)
+    setUploadFileName(files.map((file) => file.name).join(", "))
+    setUploadText("")
     setUploadResult(null)
+    setUploadQueue(
+      files.map((file) => ({
+        fileName: file.name,
+        status: "pending",
+      })),
+    )
   }
 
   const handleProcessUpload = async () => {
-    if (!uploadText.trim()) {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    const hasFiles = uploadFiles.length > 0
+    const hasText = uploadText.trim().length > 0
+
+    if (!hasFiles && !hasText) {
       setError("Envie um arquivo .txt com o relatório do paciente")
       return
     }
@@ -486,8 +506,60 @@ export default function AdminHomePage() {
     setUploading(true)
     setError("")
     setSuccessMessage("")
+    setUploadProgress(null)
 
     try {
+      if (hasFiles) {
+        setUploadProgress({ current: 0, total: uploadFiles.length })
+        const results: UploadQueueItem[] = []
+
+        for (const [index, file] of uploadFiles.entries()) {
+          setUploadQueue((prev) =>
+            prev.map((item) =>
+              item.fileName === file.name ? { ...item, status: "processing" } : item,
+            ),
+          )
+          setUploadProgress({ current: index + 1, total: uploadFiles.length })
+
+          try {
+            const text = await file.text()
+            const response = await fetch("/api/process-and-register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ rawText: text, sourceName: file.name }),
+            })
+
+            const data = await response.json()
+
+            if (!response.ok) {
+              throw new Error(data.error || "Falha ao processar relatório")
+            }
+
+            results.push({ fileName: file.name, status: "success", result: data })
+            setUploadQueue((prev) =>
+              prev.map((item) =>
+                item.fileName === file.name ? { ...item, status: "success", result: data } : item,
+              ),
+            )
+            await delay(350)
+          } catch (err: any) {
+            const message = err.message || "Erro ao processar arquivo"
+            results.push({ fileName: file.name, status: "error", error: message })
+            setUploadQueue((prev) =>
+              prev.map((item) =>
+                item.fileName === file.name ? { ...item, status: "error", error: message } : item,
+              ),
+            )
+            await delay(350)
+          }
+        }
+
+        setUploadResult(results.find((item) => item.status === "success")?.result ?? null)
+        setSuccessMessage("Relatórios processados em sequência")
+        await loadPatients()
+        return
+      }
+
       const response = await fetch("/api/process-and-register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -507,6 +579,7 @@ export default function AdminHomePage() {
       setError(err.message || "Erro ao processar arquivo")
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -903,21 +976,36 @@ export default function AdminHomePage() {
                       id="txt"
                       className="h-48"
                       value={uploadText}
-                      onChange={(event) => setUploadText(event.target.value)}
+                      onChange={(event) => {
+                        setUploadText(event.target.value)
+                        if (uploadFiles.length > 0) {
+                          setUploadFiles([])
+                          setUploadFileName("")
+                          setUploadQueue([])
+                        }
+                      }}
                       placeholder="Cole aqui o conteúdo do relatório..."
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="file">Ou envie um arquivo .txt</Label>
+                    <Label htmlFor="file">Ou envie um ou vários arquivos .txt</Label>
                     <Input
                       id="file"
                       type="file"
                       accept=".txt"
+                      multiple
                       onChange={handleFileUpload}
                       ref={uploadFileInputRef}
                     />
-                    {uploadFileName && (
-                      <p className="text-xs text-muted-foreground">Arquivo selecionado: {uploadFileName}</p>
+                    {uploadFiles.length > 0 && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <p>{uploadFiles.length} arquivo(s) selecionado(s).</p>
+                        <ul className="list-disc pl-4">
+                          {uploadFiles.map((file) => (
+                            <li key={file.name}>{file.name}</li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -933,6 +1021,33 @@ export default function AdminHomePage() {
                     </>
                   )}
                 </Button>
+
+                {uploadProgress && (
+                  <p className="text-xs text-muted-foreground">
+                    Processando {uploadProgress.current} de {uploadProgress.total} relatório(s)...
+                  </p>
+                )}
+
+                {uploadQueue.length > 0 && (
+                  <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
+                    <div className="flex items-center gap-2 font-semibold text-slate-800">
+                      <ListChecks className="h-4 w-4 text-blue-600" /> Fila de processamento
+                    </div>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {uploadQueue.map((item) => (
+                        <li key={item.fileName} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{item.fileName}</span>
+                          <span>
+                            {item.status === "pending" && "Aguardando"}
+                            {item.status === "processing" && "Processando..."}
+                            {item.status === "success" && "Concluído"}
+                            {item.status === "error" && "Erro"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {uploadResult?.cleanText && (
                   <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
