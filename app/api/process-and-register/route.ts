@@ -16,6 +16,7 @@ interface ProcessPayload {
   rawText: string
   sourceName?: string
   debugLogin?: boolean
+  debug?: boolean
 }
 
 function slugifyName(name: string) {
@@ -72,6 +73,27 @@ async function getOrCreateAuthUser(
   throw createError || new Error("Falha ao criar usuário")
 }
 
+function diffTextSnapshot(original: string, current: string) {
+  if (original === current) {
+    return { matches: true, length: original.length }
+  }
+
+  const minLength = Math.min(original.length, current.length)
+  let index = 0
+  while (index < minLength && original[index] === current[index]) {
+    index += 1
+  }
+
+  return {
+    matches: false,
+    length: current.length,
+    originalLength: original.length,
+    firstMismatchIndex: index,
+    originalSnippet: original.slice(Math.max(0, index - 20), index + 20),
+    currentSnippet: current.slice(Math.max(0, index - 20), index + 20),
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: ProcessPayload = await request.json()
@@ -82,15 +104,22 @@ export async function POST(request: Request) {
     }
 
     const { cleanText, logs } = cleanMedicalText(rawText)
-    const parsed = extractPatientData(cleanText, { debug })
+    const cleanTextSnapshot = cleanText
+    const parsed = extractPatientData(cleanTextSnapshot, { debug })
+    const cleanTextDiff = debug ? diffTextSnapshot(cleanTextSnapshot, cleanText) : undefined
 
     if (parsed.missing.length > 0) {
       return NextResponse.json(
         {
-          cleanText,
+          cleanText: cleanTextSnapshot,
           logs,
           missing: parsed.missing,
-          debug: debug ? parsed.debug : undefined,
+          debug: debug
+            ? {
+                parser: parsed.debug,
+                cleanTextDiff,
+              }
+            : undefined,
           error: "Não foi possível extrair nome completo e data de nascimento do relatório",
         },
         { status: 422 },
