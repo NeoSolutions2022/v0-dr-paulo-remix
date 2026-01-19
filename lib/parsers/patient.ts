@@ -18,8 +18,8 @@ interface PatientLabelMatch {
   normalized?: string
 }
 
-const nameLineRegex = /Nome\s*[:\-]\s*(.+)/i
-const birthDateLineRegex = /Data\s*de\s*Nascimento\s*[:\-]\s*(.+)/i
+const nameLineRegex = /Nome\s*[:\-]?\s*(.+)/i
+const birthDateLineRegex = /Data\s*de\s*Nascimento\s*[:\-]?\s*(.+)/i
 
 export function normalizeBirthDate(raw?: string): string | undefined {
   if (!raw) return undefined
@@ -123,6 +123,10 @@ function extractFullName(lines: string[], debug?: PatientParseDebug): string | u
     }
     if (cleaned) return cleaned
   }
+  if (debug) {
+    const hintLine = lines.find((line) => /Nome/i.test(line))
+    if (hintLine) debug.steps.push(`Linha com "Nome" não capturada: "${hintLine}"`)
+  }
   if (debug) debug.steps.push("Nenhuma linha com Nome encontrada.")
   return undefined
 }
@@ -139,6 +143,10 @@ function extractBirthDate(lines: string[], debug?: PatientParseDebug): string | 
     if (debug) {
       debug.steps.push(`Data de Nascimento inválida após normalização: "${match[1]}"`)
     }
+  }
+  if (debug) {
+    const hintLine = lines.find((line) => /Data\s*de\s*Nascimento/i.test(line))
+    if (hintLine) debug.steps.push(`Linha com "Data de Nascimento" não capturada: "${hintLine}"`)
   }
   if (debug) debug.steps.push("Nenhuma linha com Data de Nascimento encontrada.")
   return undefined
