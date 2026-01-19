@@ -70,6 +70,13 @@ interface UploadQueueItem {
   error?: string
 }
 
+interface HtmlQueueItem {
+  documentId: string
+  patientName: string
+  status: "pending" | "processing" | "success" | "error"
+  error?: string
+}
+
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -86,6 +93,9 @@ export default function AdminHomePage() {
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
+  const [bulkHtmlQueue, setBulkHtmlQueue] = useState<HtmlQueueItem[]>([])
+  const [bulkHtmlProgress, setBulkHtmlProgress] = useState<{ current: number; total: number } | null>(null)
+  const [bulkHtmlProcessing, setBulkHtmlProcessing] = useState(false)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -583,6 +593,87 @@ export default function AdminHomePage() {
     }
   }
 
+  const handleGenerateMissingHtml = async () => {
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    const documentsWithoutHtml = patients.flatMap((patient) =>
+      (patient.documents || [])
+        .filter((doc) => !doc.html?.trim())
+        .map((doc) => ({ doc, patientName: patient.full_name })),
+    )
+
+    if (documentsWithoutHtml.length === 0) {
+      setSuccessMessage("Todos os relatórios já possuem HTML.")
+      return
+    }
+
+    setBulkHtmlProcessing(true)
+    setError("")
+    setSuccessMessage("")
+    setBulkHtmlProgress({ current: 0, total: documentsWithoutHtml.length })
+    setBulkHtmlQueue(
+      documentsWithoutHtml.map(({ doc, patientName }) => ({
+        documentId: doc.id,
+        patientName,
+        status: "pending",
+      })),
+    )
+
+    try {
+      for (const [index, { doc, patientName }] of documentsWithoutHtml.entries()) {
+        setBulkHtmlQueue((prev) =>
+          prev.map((item) =>
+            item.documentId === doc.id ? { ...item, status: "processing" } : item,
+          ),
+        )
+        setBulkHtmlProgress({ current: index + 1, total: documentsWithoutHtml.length })
+
+        try {
+          const response = await fetch(`/api/documents/${doc.id}/generate-html`, { method: "POST" })
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.error || "Falha ao gerar HTML")
+          }
+
+          const nextHtml = typeof data.html === "string" ? data.html : ""
+          setPatients((prev) =>
+            prev.map((patient) =>
+              patient.id === doc.patient_id
+                ? {
+                    ...patient,
+                    documents: patient.documents?.map((documentItem) =>
+                      documentItem.id === doc.id ? { ...documentItem, html: nextHtml } : documentItem,
+                    ),
+                  }
+                : patient,
+            ),
+          )
+          setBulkHtmlQueue((prev) =>
+            prev.map((item) =>
+              item.documentId === doc.id ? { ...item, status: "success" } : item,
+            ),
+          )
+          await delay(1500)
+        } catch (err: any) {
+          const message = err.message || "Erro ao gerar HTML"
+          setBulkHtmlQueue((prev) =>
+            prev.map((item) =>
+              item.documentId === doc.id ? { ...item, status: "error", error: message } : item,
+            ),
+          )
+          await delay(1500)
+        }
+      }
+
+      setSuccessMessage("Processamento de HTML concluído.")
+    } catch (err: any) {
+      setError(err.message || "Erro ao gerar HTML em lote")
+    } finally {
+      setBulkHtmlProcessing(false)
+      setBulkHtmlProgress(null)
+    }
+  }
+
   const filteredPatients = useMemo(() => {
     if (!search.trim()) return patients
     return patients.filter((patient) =>
@@ -616,6 +707,17 @@ export default function AdminHomePage() {
             <div className="flex items-center gap-2">
               <Button variant="secondary" onClick={handleUploadShortcut}>
                 <Upload className="mr-2 h-4 w-4" /> Upload de relatório
+              </Button>
+              <Button variant="outline" onClick={handleGenerateMissingHtml} disabled={bulkHtmlProcessing}>
+                {bulkHtmlProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando HTML pendente...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-4 w-4" /> Gerar HTML pendente
+                  </>
+                )}
               </Button>
               <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
                 {loadingPatients ? (
@@ -1277,6 +1379,33 @@ export default function AdminHomePage() {
               </div>
             </div>
           </div>
+          {bulkHtmlProgress && (
+            <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-slate-800">
+                <ListChecks className="h-4 w-4 text-blue-600" /> Processamento de HTML
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Processando {bulkHtmlProgress.current} de {bulkHtmlProgress.total} relatório(s)...
+              </p>
+              {bulkHtmlQueue.length > 0 && (
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  {bulkHtmlQueue.map((item) => (
+                    <li key={item.documentId} className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        {item.patientName} • {item.documentId.slice(0, 6)}
+                      </span>
+                      <span>
+                        {item.status === "pending" && "Aguardando"}
+                        {item.status === "processing" && "Processando..."}
+                        {item.status === "success" && "Concluído"}
+                        {item.status === "error" && "Erro"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         )}
       </div>
     </div>
