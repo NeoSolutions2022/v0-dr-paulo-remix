@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -91,6 +91,7 @@ export default function AdminHomePage() {
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const uploadSectionId = "admin-upload-section"
+  const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const selectedPatient = useMemo(
     () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
@@ -167,6 +168,13 @@ export default function AdminHomePage() {
     if (section) {
       section.scrollIntoView({ behavior: "smooth", block: "start" })
     }
+  }
+
+  const handleUploadShortcut = () => {
+    scrollToUpload()
+    window.setTimeout(() => {
+      uploadFileInputRef.current?.click()
+    }, 150)
   }
 
   const loadPatients = async () => {
@@ -533,8 +541,8 @@ export default function AdminHomePage() {
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={scrollToUpload}>
-                <Upload className="mr-2 h-4 w-4" /> Novo relatório
+              <Button variant="secondary" onClick={handleUploadShortcut}>
+                <Upload className="mr-2 h-4 w-4" /> Upload de relatório
               </Button>
               <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
                 {loadingPatients ? (
@@ -883,7 +891,8 @@ export default function AdminHomePage() {
                   <Upload className="h-5 w-5 text-blue-600" /> Novo paciente por relatório .txt
                 </CardTitle>
                 <CardDescription>
-                  Faça upload de um texto clínico para limpar, registrar e criar as credenciais do paciente
+                  Faça upload do TXT para extrair nome e data de nascimento e gerar o login (senha = data de
+                  nascimento)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -900,7 +909,13 @@ export default function AdminHomePage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="file">Ou envie um arquivo .txt</Label>
-                    <Input id="file" type="file" accept=".txt" onChange={handleFileUpload} />
+                    <Input
+                      id="file"
+                      type="file"
+                      accept=".txt"
+                      onChange={handleFileUpload}
+                      ref={uploadFileInputRef}
+                    />
                     {uploadFileName && (
                       <p className="text-xs text-muted-foreground">Arquivo selecionado: {uploadFileName}</p>
                     )}
