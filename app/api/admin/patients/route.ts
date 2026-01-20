@@ -7,6 +7,7 @@ const DEFAULT_SUPABASE_URL = 'https://fhznxprnzdswjzpesgal.supabase.co'
 const DEFAULT_SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   'sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5'
+const DEFAULT_SUPABASE_SERVICE_KEY = DEFAULT_SUPABASE_KEY
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
-  const supabaseKey = DEFAULT_SUPABASE_KEY
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_KEY
 
   const supabase = createSupabaseClient(supabaseUrl, supabaseKey, {
     auth: { autoRefreshToken: false, persistSession: false },
