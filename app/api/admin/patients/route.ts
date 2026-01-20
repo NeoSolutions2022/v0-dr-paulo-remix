@@ -17,6 +17,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+<<<<<<< Updated upstream
+=======
+  const { searchParams } = request.nextUrl
+  const search = searchParams.get('search')?.trim() || ''
+
+  // Mantém seu modelo de "limit", mas com batch pra não dar Bad Request
+  const limitParam = Number(searchParams.get('limit') || '200')
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 1000) : 200
+
+>>>>>>> Stashed changes
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
   const supabaseKey = DEFAULT_SUPABASE_KEY
 
@@ -24,10 +34,25 @@ export async function GET(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
+<<<<<<< Updated upstream
   const { data: patients, error: patientsError } = await supabase
     .from('patients')
     .select('*')
     .order('created_at', { ascending: false })
+=======
+  // 1) Pacientes
+  let patientsQuery = supabase
+    .from('patients')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (search) {
+    patientsQuery = patientsQuery.ilike('full_name', `%${search}%`)
+  }
+
+  const { data: patients, error: patientsError } = await patientsQuery
+>>>>>>> Stashed changes
 
   if (patientsError) {
     console.error('[admin] Erro ao carregar pacientes', patientsError)
