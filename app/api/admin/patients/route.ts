@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   }
 
+  const { searchParams } = request.nextUrl
+  const search = searchParams.get('search')?.trim() || ''
+  const limitParam = Number(searchParams.get('limit') || '1000')
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 1000) : 1000
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_KEY
 
@@ -25,10 +30,13 @@ export async function GET(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const { data: patients, error: patientsError } = await supabase
-    .from('patients')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let patientsQuery = supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(limit)
+
+  if (search) {
+    patientsQuery = patientsQuery.ilike('full_name', `%${search}%`)
+  }
+
+  const { data: patients, error: patientsError } = await patientsQuery
 
   if (patientsError) {
     console.error('[admin] Erro ao carregar pacientes', patientsError)
