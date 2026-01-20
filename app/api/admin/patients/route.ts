@@ -25,10 +25,15 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl
   const search = searchParams.get('search')?.trim() || ''
+<<<<<<< HEAD
 
   // Mantém seu modelo de "limit", mas com batch pra não dar Bad Request
   const limitParam = Number(searchParams.get('limit') || '200')
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 1000) : 200
+=======
+  const limitParam = Number(searchParams.get('limit') || '1000')
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 1000) : 1000
+>>>>>>> bb23a81a28ce6c2e372b7c8bc4822609bb6af808
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SUPABASE_SERVICE_KEY
@@ -37,12 +42,16 @@ export async function GET(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
+<<<<<<< HEAD
   // 1) Pacientes
   let patientsQuery = supabase
     .from('patients')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit)
+=======
+  let patientsQuery = supabase.from('patients').select('*').order('created_at', { ascending: false }).limit(limit)
+>>>>>>> bb23a81a28ce6c2e372b7c8bc4822609bb6af808
 
   if (search) {
     patientsQuery = patientsQuery.ilike('full_name', `%${search}%`)
