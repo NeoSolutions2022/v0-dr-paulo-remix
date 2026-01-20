@@ -110,6 +110,8 @@ export default function AdminHomePage() {
   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
+  const [patientPage, setPatientPage] = useState(1)
+  const patientsPerPage = 12
   const uploadSectionId = "admin-upload-section"
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -681,6 +683,16 @@ export default function AdminHomePage() {
     )
   }, [patients, search])
 
+  useEffect(() => {
+    setPatientPage(1)
+  }, [search, patients.length])
+
+  const totalPatientPages = Math.max(1, Math.ceil(filteredPatients.length / patientsPerPage))
+  const paginatedPatients = useMemo(() => {
+    const startIndex = (patientPage - 1) * patientsPerPage
+    return filteredPatients.slice(startIndex, startIndex + patientsPerPage)
+  }, [filteredPatients, patientPage])
+
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST" })
     router.push("/admin/login")
@@ -772,7 +784,7 @@ export default function AdminHomePage() {
                     <div className="p-4 text-sm text-muted-foreground">Nenhum paciente encontrado</div>
                   )}
 
-                  {filteredPatients.map((patient) => (
+                  {paginatedPatients.map((patient) => (
                     <div
                       key={patient.id}
                       className={`w-full p-4 transition hover:bg-slate-50 ${
@@ -806,6 +818,31 @@ export default function AdminHomePage() {
                   ))}
                 </div>
               </ScrollArea>
+              <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+                <span>
+                  Página {patientPage} de {totalPatientPages}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPatientPage((prev) => Math.max(1, prev - 1))}
+                    disabled={patientPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPatientPage((prev) => Math.min(totalPatientPages, prev + 1))}
+                    disabled={patientPage === totalPatientPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
