@@ -1,0 +1,860 @@
+diff --git a/app/page.tsx b/app/page.tsx
+index 51a47e322dba60b90185a709f0030d4a0af79d4e..777c77e3dffb786ae140defaa9ea7289eefd3050 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -41,77 +41,100 @@ interface PatientDocument {
+ 
+ interface Patient {
+   id: string
+   full_name: string
+   email: string | null
+   birth_date: string | null
+   cpf?: string | null
+   phone?: string | null
+   created_at?: string
+   updated_at?: string
+   documents?: PatientDocument[]
+ }
+ 
+ interface UploadResult {
+   cleanText: string
+   credentials?: {
+     loginName?: string
+     password?: string
+     existing?: boolean
+   }
+   message?: string
+   patient?: Patient
+   document?: PatientDocument
+ }
+ 
++interface UploadQueueItem {
++  fileName: string
++  status: "pending" | "processing" | "success" | "error"
++  result?: UploadResult
++  error?: string
++}
++
++interface HtmlQueueItem {
++  documentId: string
++  patientName: string
++  status: "pending" | "processing" | "success" | "error"
++  error?: string
++}
++
+ export default function AdminHomePage() {
+   const router = useRouter()
+   const [patients, setPatients] = useState<Patient[]>([])
+   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
+   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
+   const [search, setSearch] = useState("")
+   const [loadingPatients, setLoadingPatients] = useState(true)
+   const [savingPatient, setSavingPatient] = useState(false)
+   const [savingDocument, setSavingDocument] = useState(false)
+   const [uploading, setUploading] = useState(false)
+   const [uploadFileName, setUploadFileName] = useState("")
+   const [uploadText, setUploadText] = useState("")
++  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
++  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
++  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
++  const [bulkHtmlQueue, setBulkHtmlQueue] = useState<HtmlQueueItem[]>([])
++  const [bulkHtmlProgress, setBulkHtmlProgress] = useState<{ current: number; total: number } | null>(null)
++  const [bulkHtmlProcessing, setBulkHtmlProcessing] = useState(false)
+   const [error, setError] = useState("")
+   const [successMessage, setSuccessMessage] = useState("")
+   const [checkingAuth, setCheckingAuth] = useState(true)
+   const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
+   const [htmlLoading, setHtmlLoading] = useState(false)
+   const [htmlError, setHtmlError] = useState("")
+   const [previewPatientId, setPreviewPatientId] = useState<string | null>(null)
+   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+   const [previewLoading, setPreviewLoading] = useState(false)
+   const [previewError, setPreviewError] = useState("")
+   const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
+   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
+   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
+   const [medicalSummaryError, setMedicalSummaryError] = useState("")
++  const [patientPage, setPatientPage] = useState(1)
++  const [patientsPerPage, setPatientsPerPage] = useState(100)
++  const [searchingServer, setSearchingServer] = useState(false)
+   const uploadSectionId = "admin-upload-section"
+   const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
+ 
+   const selectedPatient = useMemo(
+     () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
+     [patients, selectedPatientId],
+   )
+ 
+   const selectedDocument = useMemo(
+     () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
+     [selectedDocumentId, selectedPatient],
+   )
+ 
+   const sanitizedHtml = useMemo(() => (htmlPreview ? sanitizeHtml(htmlPreview) : ""), [htmlPreview])
+   const previewPatient = useMemo(
+     () => patients.find((patient) => patient.id === previewPatientId) ?? null,
+     [patients, previewPatientId],
+   )
+   const sanitizedPreviewHtml = useMemo(
+     () => (previewHtml ? sanitizeHtml(previewHtml) : ""),
+     [previewHtml],
+   )
+ 
+   const extractMedicalSummary = (html: string) => {
+     if (!html) return ""
+@@ -134,77 +157,86 @@ export default function AdminHomePage() {
+     const summaryParagraph =
+       heading?.closest(".card")?.querySelector(".editable-block p") ??
+       document.querySelector(".editable-block .hint + p")
+     if (!summaryParagraph) {
+       return html
+     }
+     summaryParagraph.textContent = summary.trim()
+     const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
+     const serialized = document.documentElement.outerHTML
+     return doctype ? `${doctype}\n${serialized}` : serialized
+   }
+ 
+   const isValidUuid = (value: string | null | undefined) =>
+     !!value &&
+     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+ 
+   useEffect(() => {
+     const verifySession = async () => {
+       const response = await fetch("/api/admin/session")
+       if (!response.ok) {
+         router.push("/admin/login")
+         return
+       }
+ 
+       setCheckingAuth(false)
+-      await loadPatients()
++      await loadPatients({ limit: 1000 })
+     }
+ 
+     verifySession()
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [])
+ 
+   const scrollToUpload = () => {
+     const section = document.getElementById(uploadSectionId)
+     if (section) {
+       section.scrollIntoView({ behavior: "smooth", block: "start" })
+     }
+   }
+ 
+   const handleUploadShortcut = () => {
+     scrollToUpload()
+     window.setTimeout(() => {
+       uploadFileInputRef.current?.click()
+     }, 150)
+   }
+ 
+-  const loadPatients = async () => {
++  const loadPatients = async (options?: { limit?: number; search?: string }) => {
+     setLoadingPatients(true)
+     setError("")
+ 
+     try {
+-      const response = await fetch("/api/admin/patients")
++      const params = new URLSearchParams()
++      const limit = options?.limit ?? 1000
++      if (limit) {
++        params.set("limit", String(limit))
++      }
++      if (options?.search) {
++        params.set("search", options.search)
++      }
++      const queryString = params.toString()
++      const response = await fetch(`/api/admin/patients${queryString ? `?${queryString}` : ""}`)
+       const data = await response.json()
+ 
+       if (!response.ok) {
+         throw new Error(data.error || "Não foi possível carregar os pacientes")
+       }
+       setPatients(data.patients || [])
+       setSelectedPatientId(data.patients?.[0]?.id ?? null)
+       setSelectedDocumentId(data.patients?.[0]?.documents?.[0]?.id ?? null)
+     } catch (err: any) {
+       setError(err.message || "Erro ao buscar pacientes")
+     } finally {
+       setLoadingPatients(false)
+     }
+   }
+ 
+   const handlePatientUpdate = async (formData: Partial<Patient>) => {
+     if (!selectedPatient) return
+     setSavingPatient(true)
+     setSuccessMessage("")
+     setError("")
+ 
+     try {
+       const response = await fetch(`/api/admin/patients/${selectedPatient.id}`, {
+         method: "PATCH",
+         headers: { "Content-Type": "application/json" },
+@@ -445,214 +477,463 @@ export default function AdminHomePage() {
+       })
+ 
+       const data = await response.json()
+ 
+       if (!response.ok) {
+         throw new Error(data.error || "Falha ao atualizar documento")
+       }
+       setPatients((prev) =>
+         prev.map((patient) =>
+           patient.id === selectedPatient?.id
+             ? {
+                 ...patient,
+                 documents: patient.documents?.map((doc) => (doc.id === selectedDocument.id ? data.document : doc)),
+               }
+             : patient,
+         ),
+       )
+       setSuccessMessage("Relatório atualizado com sucesso")
+     } catch (err: any) {
+       setError(err.message || "Erro ao salvar documento")
+     } finally {
+       setSavingDocument(false)
+     }
+   }
+ 
+-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+-    const file = event.target.files?.[0]
+-    if (!file) return
++  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
++    const files = Array.from(event.target.files || [])
++    if (files.length === 0) return
+ 
+-    const text = await file.text()
+-    setUploadFileName(file.name)
+-    setUploadText(text)
++    setUploadFiles(files)
++    setUploadFileName(files.map((file) => file.name).join(", "))
++    setUploadText("")
+     setUploadResult(null)
++    setUploadQueue(
++      files.map((file) => ({
++        fileName: file.name,
++        status: "pending",
++      })),
++    )
+   }
+ 
+   const handleProcessUpload = async () => {
+-    if (!uploadText.trim()) {
++    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
++    const hasFiles = uploadFiles.length > 0
++    const hasText = uploadText.trim().length > 0
++
++    if (!hasFiles && !hasText) {
+       setError("Envie um arquivo .txt com o relatório do paciente")
+       return
+     }
+ 
+     setUploading(true)
+     setError("")
+     setSuccessMessage("")
++    setUploadProgress(null)
+ 
+     try {
++      if (hasFiles) {
++        setUploadProgress({ current: 0, total: uploadFiles.length })
++        const results: UploadQueueItem[] = []
++
++        for (const [index, file] of uploadFiles.entries()) {
++          setUploadQueue((prev) =>
++            prev.map((item) =>
++              item.fileName === file.name ? { ...item, status: "processing" } : item,
++            ),
++          )
++          setUploadProgress({ current: index + 1, total: uploadFiles.length })
++
++          try {
++            const text = await file.text()
++            const response = await fetch("/api/process-and-register", {
++              method: "POST",
++              headers: { "Content-Type": "application/json" },
++              body: JSON.stringify({ rawText: text, sourceName: file.name }),
++            })
++
++            const data = await response.json()
++
++            if (!response.ok) {
++              throw new Error(data.error || "Falha ao processar relatório")
++            }
++
++            results.push({ fileName: file.name, status: "success", result: data })
++            setUploadQueue((prev) =>
++              prev.map((item) =>
++                item.fileName === file.name ? { ...item, status: "success", result: data } : item,
++              ),
++            )
++            await delay(350)
++          } catch (err: any) {
++            const message = err.message || "Erro ao processar arquivo"
++            results.push({ fileName: file.name, status: "error", error: message })
++            setUploadQueue((prev) =>
++              prev.map((item) =>
++                item.fileName === file.name ? { ...item, status: "error", error: message } : item,
++              ),
++            )
++            await delay(350)
++          }
++        }
++
++        setUploadResult(results.find((item) => item.status === "success")?.result ?? null)
++        setSuccessMessage("Relatórios processados em sequência")
++        await loadPatients()
++        return
++      }
++
+       const response = await fetch("/api/process-and-register", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ rawText: uploadText, sourceName: uploadFileName || "relatorio.txt" }),
+       })
+ 
+       const data = await response.json()
+ 
+       if (!response.ok) {
+         throw new Error(data.error || "Falha ao processar relatório")
+       }
+ 
+       setUploadResult(data)
+       setSuccessMessage("Relatório processado e login criado com sucesso")
+       await loadPatients()
+     } catch (err: any) {
+       setError(err.message || "Erro ao processar arquivo")
+     } finally {
+       setUploading(false)
++      setUploadProgress(null)
++    }
++  }
++
++  const handleGenerateMissingHtml = async () => {
++    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
++    const documentsWithoutHtml = patients.flatMap((patient) =>
++      (patient.documents || [])
++        .filter((doc) => !doc.html?.trim())
++        .map((doc) => ({ doc, patientName: patient.full_name })),
++    )
++
++    if (documentsWithoutHtml.length === 0) {
++      setSuccessMessage("Todos os relatórios já possuem HTML.")
++      return
++    }
++
++    setBulkHtmlProcessing(true)
++    setError("")
++    setSuccessMessage("")
++    setBulkHtmlProgress({ current: 0, total: documentsWithoutHtml.length })
++    setBulkHtmlQueue(
++      documentsWithoutHtml.map(({ doc, patientName }) => ({
++        documentId: doc.id,
++        patientName,
++        status: "pending",
++      })),
++    )
++
++    try {
++      for (const [index, { doc, patientName }] of documentsWithoutHtml.entries()) {
++        setBulkHtmlQueue((prev) =>
++          prev.map((item) =>
++            item.documentId === doc.id ? { ...item, status: "processing" } : item,
++          ),
++        )
++        setBulkHtmlProgress({ current: index + 1, total: documentsWithoutHtml.length })
++
++        try {
++          const response = await fetch(`/api/documents/${doc.id}/generate-html`, { method: "POST" })
++          const data = await response.json()
++
++          if (!response.ok) {
++            throw new Error(data.error || "Falha ao gerar HTML")
++          }
++
++          const nextHtml = typeof data.html === "string" ? data.html : ""
++          setPatients((prev) =>
++            prev.map((patient) =>
++              patient.id === doc.patient_id
++                ? {
++                    ...patient,
++                    documents: patient.documents?.map((documentItem) =>
++                      documentItem.id === doc.id ? { ...documentItem, html: nextHtml } : documentItem,
++                    ),
++                  }
++                : patient,
++            ),
++          )
++          setBulkHtmlQueue((prev) =>
++            prev.map((item) =>
++              item.documentId === doc.id ? { ...item, status: "success" } : item,
++            ),
++          )
++          await delay(1500)
++        } catch (err: any) {
++          const message = err.message || "Erro ao gerar HTML"
++          setBulkHtmlQueue((prev) =>
++            prev.map((item) =>
++              item.documentId === doc.id ? { ...item, status: "error", error: message } : item,
++            ),
++          )
++          await delay(1500)
++        }
++      }
++
++      setSuccessMessage("Processamento de HTML concluído.")
++    } catch (err: any) {
++      setError(err.message || "Erro ao gerar HTML em lote")
++    } finally {
++      setBulkHtmlProcessing(false)
++      setBulkHtmlProgress(null)
+     }
+   }
+ 
+   const filteredPatients = useMemo(() => {
+     if (!search.trim()) return patients
+     return patients.filter((patient) =>
+       patient.full_name.toLowerCase().includes(search.trim().toLowerCase()),
+     )
+   }, [patients, search])
+ 
++  useEffect(() => {
++    setPatientPage(1)
++  }, [search, patients.length, patientsPerPage])
++
++  useEffect(() => {
++    const trimmedSearch = search.trim()
++    if (!trimmedSearch) {
++      setSearchingServer(false)
++      return
++    }
++    if (filteredPatients.length > 0) {
++      return
++    }
++
++    const timeout = window.setTimeout(async () => {
++      setSearchingServer(true)
++      try {
++        const params = new URLSearchParams({ search: trimmedSearch, limit: "1000" })
++        const response = await fetch(`/api/admin/patients?${params.toString()}`)
++        const data = await response.json()
++
++        if (response.ok && Array.isArray(data.patients)) {
++          setPatients((prev) => {
++            const existingIds = new Set(prev.map((patient) => patient.id))
++            const merged = [...prev]
++            data.patients.forEach((patient: Patient) => {
++              if (!existingIds.has(patient.id)) {
++                merged.push(patient)
++              }
++            })
++            return merged
++          })
++        }
++      } finally {
++        setSearchingServer(false)
++      }
++    }, 400)
++
++    return () => {
++      window.clearTimeout(timeout)
++    }
++  }, [search, filteredPatients.length])
++
++  const totalPatientPages = Math.max(1, Math.ceil(filteredPatients.length / patientsPerPage))
++  const paginatedPatients = useMemo(() => {
++    const startIndex = (patientPage - 1) * patientsPerPage
++    return filteredPatients.slice(startIndex, startIndex + patientsPerPage)
++  }, [filteredPatients, patientPage])
++
+   const handleLogout = async () => {
+     await fetch("/api/admin/logout", { method: "POST" })
+     router.push("/admin/login")
+   }
+ 
+   if (checkingAuth) {
+     return (
+       <div className="flex min-h-screen items-center justify-center">
+         <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+       </div>
+     )
+   }
+ 
+   return (
+     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 px-4 py-8">
+       <div className="mx-auto flex max-w-6xl flex-col gap-6">
+           <div className="flex flex-wrap items-center justify-between gap-3">
+             <div>
+               <p className="text-sm text-muted-foreground">Painel administrativo</p>
+               <h1 className="text-3xl font-bold flex items-center gap-2">
+                 <Users className="h-6 w-6 text-blue-600" /> Doutor Paulo
+               </h1>
+             </div>
+             <div className="flex items-center gap-2">
+               <Button variant="secondary" onClick={handleUploadShortcut}>
+                 <Upload className="mr-2 h-4 w-4" /> Upload de relatório
+               </Button>
++              <Button variant="outline" onClick={handleGenerateMissingHtml} disabled={bulkHtmlProcessing}>
++                {bulkHtmlProcessing ? (
++                  <>
++                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando HTML pendente...
++                  </>
++                ) : (
++                  <>
++                    <FileText className="mr-2 h-4 w-4" /> Gerar HTML pendente
++                  </>
++                )}
++              </Button>
+               <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
+                 {loadingPatients ? (
+                   <>
+                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando
+                   </>
+               ) : (
+                 <>
+                   <RefreshCw className="mr-2 h-4 w-4" /> Atualizar lista
+                 </>
+               )}
+             </Button>
+             <Button variant="secondary" onClick={handleLogout}>
+               <LogOut className="mr-2 h-4 w-4" /> Sair
+             </Button>
+           </div>
+         </div>
+ 
+         {(error || successMessage) && (
+           <Alert variant={error ? "destructive" : "default"}>
+             {error ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+             <AlertDescription>{error || successMessage}</AlertDescription>
+           </Alert>
+         )}
+ 
+         <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
+           <Card className="shadow-sm">
+             <CardHeader className="space-y-4">
+               <div className="flex items-center justify-between">
+                 <CardTitle className="text-xl">Pacientes</CardTitle>
+                 <Badge variant="secondary">{patients.length}</Badge>
+               </div>
+               <div className="flex items-center gap-2">
+                 <Search className="h-4 w-4 text-muted-foreground" />
+                 <Input
+                   value={search}
+                   onChange={(event) => setSearch(event.target.value)}
+                   placeholder="Buscar paciente"
+                 />
++                {searchingServer && (
++                  <span className="text-xs text-muted-foreground">Buscando no banco...</span>
++                )}
+               </div>
+             </CardHeader>
+             <CardContent className="p-0">
+               <ScrollArea className="h-[540px]">
+                 <div className="divide-y">
+                   {loadingPatients && (
+                     <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                       <Loader2 className="h-4 w-4 animate-spin" /> Carregando pacientes...
+                     </div>
+                   )}
+ 
+                   {!loadingPatients && filteredPatients.length === 0 && (
+                     <div className="p-4 text-sm text-muted-foreground">Nenhum paciente encontrado</div>
+                   )}
+ 
+-                  {filteredPatients.map((patient) => (
++                  {paginatedPatients.map((patient) => (
+                     <div
+                       key={patient.id}
+                       className={`w-full p-4 transition hover:bg-slate-50 ${
+                         patient.id === selectedPatient?.id ? "bg-blue-50" : ""
+                       }`}
+                     >
+                       <div className="flex items-start justify-between gap-3">
+                         <button
+                           className="text-left flex-1"
+                           onClick={() => {
+                             setSelectedPatientId(patient.id)
+                             setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
+                           }}
+                         >
+                           <p className="font-semibold text-slate-900">{patient.full_name}</p>
+                           <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
+                           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                             <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
+                           </div>
+                         </button>
+                         <Button
+                           type="button"
+                           size="sm"
+                           variant="outline"
+                           onClick={() => handleOpenPreview(patient.id)}
+                         >
+                           Visualizar/Editar
+                         </Button>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </ScrollArea>
++              <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground">
++                <span>
++                  Página {patientPage} de {totalPatientPages}
++                </span>
++                <div className="flex items-center gap-2">
++                  <label className="flex items-center gap-2">
++                    <span>Por página</span>
++                    <select
++                      className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
++                      value={patientsPerPage}
++                      onChange={(event) => {
++                        setPatientsPerPage(Number(event.target.value))
++                        setPatientPage(1)
++                      }}
++                    >
++                      {[100, 200, 500, 1000].map((size) => (
++                        <option key={size} value={size}>
++                          {size}
++                        </option>
++                      ))}
++                    </select>
++                  </label>
++                  <Button
++                    type="button"
++                    size="sm"
++                    variant="outline"
++                    onClick={() => setPatientPage((prev) => Math.max(1, prev - 1))}
++                    disabled={patientPage === 1}
++                  >
++                    Anterior
++                  </Button>
++                  <Button
++                    type="button"
++                    size="sm"
++                    variant="outline"
++                    onClick={() => setPatientPage((prev) => Math.min(totalPatientPages, prev + 1))}
++                    disabled={patientPage === totalPatientPages}
++                  >
++                    Próxima
++                  </Button>
++                </div>
++              </div>
+             </CardContent>
+           </Card>
+ 
+           <div className="space-y-6">
+             <Card className="shadow-sm">
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2 text-xl">
+                   <PenSquare className="h-5 w-5 text-blue-600" /> Dados do paciente
+                 </CardTitle>
+                 <CardDescription>Edite informações básicas e salve em tempo real</CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="grid gap-4 md:grid-cols-2">
+                   <div className="space-y-2">
+                     <Label htmlFor="full_name">Nome completo</Label>
+                     <Input
+                       id="full_name"
+                       value={selectedPatient?.full_name || ""}
+                       onChange={(event) =>
+                         setPatients((prev) =>
+                           prev.map((patient) =>
+                             patient.id === selectedPatient?.id
+                               ? { ...patient, full_name: event.target.value }
+                               : patient,
+                           ),
+@@ -881,116 +1162,186 @@ export default function AdminHomePage() {
+                   </div>
+                 ) : (
+                   <p className="text-sm text-muted-foreground">Selecione um relatório para visualizar</p>
+                 )}
+               </CardContent>
+             </Card>
+ 
+             <Card className="shadow-sm" id={uploadSectionId}>
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2 text-xl">
+                   <Upload className="h-5 w-5 text-blue-600" /> Novo paciente por relatório .txt
+                 </CardTitle>
+                 <CardDescription>
+                   Faça upload do TXT para extrair nome e data de nascimento e gerar o login (senha = data de
+                   nascimento)
+                 </CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="grid gap-4 md:grid-cols-[1fr,180px]">
+                   <div className="space-y-2">
+                     <Label htmlFor="txt">Cole ou revise o relatório</Label>
+                     <Textarea
+                       id="txt"
+                       className="h-48"
+                       value={uploadText}
+-                      onChange={(event) => setUploadText(event.target.value)}
++                      onChange={(event) => {
++                        setUploadText(event.target.value)
++                        if (uploadFiles.length > 0) {
++                          setUploadFiles([])
++                          setUploadFileName("")
++                          setUploadQueue([])
++                        }
++                      }}
+                       placeholder="Cole aqui o conteúdo do relatório..."
+                     />
+                   </div>
+                   <div className="space-y-2">
+-                    <Label htmlFor="file">Ou envie um arquivo .txt</Label>
++                    <Label htmlFor="file">Ou envie um ou vários arquivos .txt</Label>
+                     <Input
+                       id="file"
+                       type="file"
+                       accept=".txt"
++                      multiple
+                       onChange={handleFileUpload}
+                       ref={uploadFileInputRef}
+                     />
+-                    {uploadFileName && (
+-                      <p className="text-xs text-muted-foreground">Arquivo selecionado: {uploadFileName}</p>
++                    {uploadFiles.length > 0 && (
++                      <div className="space-y-1 text-xs text-muted-foreground">
++                        <p>{uploadFiles.length} arquivo(s) selecionado(s).</p>
++                        <ul className="list-disc pl-4">
++                          {uploadFiles.map((file) => (
++                            <li key={file.name}>{file.name}</li>
++                          ))}
++                        </ul>
++                      </div>
+                     )}
+                   </div>
+                 </div>
+ 
+                 <Button onClick={handleProcessUpload} disabled={uploading} className="w-full md:w-auto">
+                   {uploading ? (
+                     <>
+                       <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando
+                     </>
+                   ) : (
+                     <>
+                       <UserPlus className="mr-2 h-4 w-4" /> Processar e criar login
+                     </>
+                   )}
+                 </Button>
+ 
++                {uploadProgress && (
++                  <p className="text-xs text-muted-foreground">
++                    Processando {uploadProgress.current} de {uploadProgress.total} relatório(s)...
++                  </p>
++                )}
++
++                {uploadQueue.length > 0 && (
++                  <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
++                    <div className="flex items-center gap-2 font-semibold text-slate-800">
++                      <ListChecks className="h-4 w-4 text-blue-600" /> Fila de processamento
++                    </div>
++                    <ul className="space-y-1 text-xs text-muted-foreground">
++                      {uploadQueue.map((item) => (
++                        <li key={item.fileName} className="flex items-center justify-between gap-2">
++                          <span className="truncate">{item.fileName}</span>
++                          <span>
++                            {item.status === "pending" && "Aguardando"}
++                            {item.status === "processing" && "Processando..."}
++                            {item.status === "success" && "Concluído"}
++                            {item.status === "error" && "Erro"}
++                          </span>
++                        </li>
++                      ))}
++                    </ul>
++                  </div>
++                )}
++
+                 {uploadResult?.cleanText && (
+                   <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                       <CheckCircle2 className="h-4 w-4 text-green-600" /> Limpeza e cadastro concluídos
+                     </div>
+                     {uploadResult.credentials && (
+                       <div className="rounded-md bg-white p-3 text-sm shadow-sm">
+                         <p className="font-semibold">Credenciais do paciente</p>
+                         <p>Login: {uploadResult.credentials.loginName}</p>
+                         <p>Senha: {uploadResult.credentials.password}</p>
+                         {uploadResult.credentials.existing && (
+                           <p className="text-xs text-muted-foreground">
+                             Paciente já existia, credenciais confirmadas
+                           </p>
+                         )}
+                       </div>
+                     )}
+                     {uploadResult.message && (
+                       <p className="text-sm text-muted-foreground">{uploadResult.message}</p>
+                     )}
+                     <div className="space-y-2">
+                       <div className="flex items-center gap-2 text-sm font-semibold">
+                         <ListChecks className="h-4 w-4 text-blue-600" /> Texto limpo
+                       </div>
+                       <Textarea value={uploadResult.cleanText} className="h-40" readOnly />
+                     </div>
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
++        </div>
++      </div>
++
++      {bulkHtmlProgress && (
++        <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
++          <div className="flex items-center gap-2 font-semibold text-slate-800">
++            <ListChecks className="h-4 w-4 text-blue-600" /> Processamento de HTML
+           </div>
++          <p className="text-xs text-muted-foreground">
++            Processando {bulkHtmlProgress.current} de {bulkHtmlProgress.total} relatório(s)...
++          </p>
++          {bulkHtmlQueue.length > 0 && (
++            <ul className="space-y-1 text-xs text-muted-foreground">
++              {bulkHtmlQueue.map((item) => (
++                <li key={item.documentId} className="flex items-center justify-between gap-2">
++                  <span className="truncate">
++                    {item.patientName} • {item.documentId.slice(0, 6)}
++                  </span>
++                  <span>
++                    {item.status === "pending" && "Aguardando"}
++                    {item.status === "processing" && "Processando..."}
++                    {item.status === "success" && "Concluído"}
++                    {item.status === "error" && "Erro"}
++                  </span>
++                </li>
++              ))}
++            </ul>
++          )}
+         </div>
++      )}
+ 
+-        {previewPatient && (
+-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
++      {previewPatient && (
++        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+             <div className="w-full max-w-5xl max-h-[90vh] bg-white rounded-xl shadow-2xl border overflow-hidden flex flex-col">
+               <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-slate-50">
+                 <div className="min-w-0">
+                   <p className="text-sm text-slate-500 truncate">Paciente</p>
+                   <h2 className="text-lg font-semibold text-slate-900 truncate">
+                     {previewPatient.full_name}
+                   </h2>
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <Button
+                     type="button"
+                     variant="outline"
+                     size="sm"
+                     onClick={handlePrintPreview}
+                     disabled={!previewHtml}
+                   >
+                     <Printer className="mr-2 h-4 w-4" />
+                     Imprimir/Salvar PDF
+                   </Button>
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     aria-label="Fechar visualização"
+                     onClick={() => setPreviewPatientId(null)}
+                   >

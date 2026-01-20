@@ -111,7 +111,8 @@ export default function AdminHomePage() {
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const [patientPage, setPatientPage] = useState(1)
-  const patientsPerPage = 12
+  const [patientsPerPage, setPatientsPerPage] = useState(100)
+  const [searchingServer, setSearchingServer] = useState(false)
   const uploadSectionId = "admin-upload-section"
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -178,7 +179,7 @@ export default function AdminHomePage() {
       }
 
       setCheckingAuth(false)
-      await loadPatients()
+      await loadPatients({ limit: 1000 })
     }
 
     verifySession()
@@ -199,12 +200,21 @@ export default function AdminHomePage() {
     }, 150)
   }
 
-  const loadPatients = async () => {
+  const loadPatients = async (options?: { limit?: number; search?: string }) => {
     setLoadingPatients(true)
     setError("")
 
     try {
-      const response = await fetch("/api/admin/patients")
+      const params = new URLSearchParams()
+      const limit = options?.limit ?? 1000
+      if (limit) {
+        params.set("limit", String(limit))
+      }
+      if (options?.search) {
+        params.set("search", options.search)
+      }
+      const queryString = params.toString()
+      const response = await fetch(`/api/admin/patients${queryString ? `?${queryString}` : ""}`)
       const data = await response.json()
 
       if (!response.ok) {
@@ -685,7 +695,46 @@ export default function AdminHomePage() {
 
   useEffect(() => {
     setPatientPage(1)
-  }, [search, patients.length])
+  }, [search, patients.length, patientsPerPage])
+
+  useEffect(() => {
+    const trimmedSearch = search.trim()
+    if (!trimmedSearch) {
+      setSearchingServer(false)
+      return
+    }
+    if (filteredPatients.length > 0) {
+      return
+    }
+
+    const timeout = window.setTimeout(async () => {
+      setSearchingServer(true)
+      try {
+        const params = new URLSearchParams({ search: trimmedSearch, limit: "1000" })
+        const response = await fetch(`/api/admin/patients?${params.toString()}`)
+        const data = await response.json()
+
+        if (response.ok && Array.isArray(data.patients)) {
+          setPatients((prev) => {
+            const existingIds = new Set(prev.map((patient) => patient.id))
+            const merged = [...prev]
+            data.patients.forEach((patient: Patient) => {
+              if (!existingIds.has(patient.id)) {
+                merged.push(patient)
+              }
+            })
+            return merged
+          })
+        }
+      } finally {
+        setSearchingServer(false)
+      }
+    }, 400)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [search, filteredPatients.length])
 
   const totalPatientPages = Math.max(1, Math.ceil(filteredPatients.length / patientsPerPage))
   const paginatedPatients = useMemo(() => {
@@ -769,6 +818,9 @@ export default function AdminHomePage() {
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar paciente"
                 />
+                {searchingServer && (
+                  <span className="text-xs text-muted-foreground">Buscando no banco...</span>
+                )}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -818,11 +870,28 @@ export default function AdminHomePage() {
                   ))}
                 </div>
               </ScrollArea>
-              <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground">
                 <span>
                   Página {patientPage} de {totalPatientPages}
                 </span>
                 <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2">
+                    <span>Por página</span>
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                      value={patientsPerPage}
+                      onChange={(event) => {
+                        setPatientsPerPage(Number(event.target.value))
+                        setPatientPage(1)
+                      }}
+                    >
+                      {[100, 200, 500, 1000].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <Button
                     type="button"
                     size="sm"
