@@ -1218,11 +1218,39 @@ export default function AdminHomePage() {
                 )}
               </CardContent>
             </Card>
-          </div>
         </div>
+      </div>
 
-        {previewPatient && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      {bulkHtmlProgress && (
+        <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
+          <div className="flex items-center gap-2 font-semibold text-slate-800">
+            <ListChecks className="h-4 w-4 text-blue-600" /> Processamento de HTML
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Processando {bulkHtmlProgress.current} de {bulkHtmlProgress.total} relatório(s)...
+          </p>
+          {bulkHtmlQueue.length > 0 && (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {bulkHtmlQueue.map((item) => (
+                <li key={item.documentId} className="flex items-center justify-between gap-2">
+                  <span className="truncate">
+                    {item.patientName} • {item.documentId.slice(0, 6)}
+                  </span>
+                  <span>
+                    {item.status === "pending" && "Aguardando"}
+                    {item.status === "processing" && "Processando..."}
+                    {item.status === "success" && "Concluído"}
+                    {item.status === "error" && "Erro"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {previewPatient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="w-full max-w-5xl max-h-[90vh] bg-white rounded-xl shadow-2xl border overflow-hidden flex flex-col">
               <div className="flex items-center justify-between gap-3 border-b px-4 py-3 bg-slate-50">
                 <div className="min-w-0">
@@ -1416,33 +1444,6 @@ export default function AdminHomePage() {
               </div>
             </div>
           </div>
-          {bulkHtmlProgress && (
-            <div className="rounded-lg border bg-white p-3 text-sm shadow-sm space-y-2">
-              <div className="flex items-center gap-2 font-semibold text-slate-800">
-                <ListChecks className="h-4 w-4 text-blue-600" /> Processamento de HTML
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Processando {bulkHtmlProgress.current} de {bulkHtmlProgress.total} relatório(s)...
-              </p>
-              {bulkHtmlQueue.length > 0 && (
-                <ul className="space-y-1 text-xs text-muted-foreground">
-                  {bulkHtmlQueue.map((item) => (
-                    <li key={item.documentId} className="flex items-center justify-between gap-2">
-                      <span className="truncate">
-                        {item.patientName} • {item.documentId.slice(0, 6)}
-                      </span>
-                      <span>
-                        {item.status === "pending" && "Aguardando"}
-                        {item.status === "processing" && "Processando..."}
-                        {item.status === "success" && "Concluído"}
-                        {item.status === "error" && "Erro"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
         )}
       </div>
     </div>
