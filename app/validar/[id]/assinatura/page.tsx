@@ -8,6 +8,10 @@ import { ShieldCheck, FileText, Fingerprint, AlertTriangle } from 'lucide-react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
+export function generateStaticParams() {
+  return []
+}
+
 type SignatureDocument = {
   id: string
   file_name: string

@@ -9,6 +9,10 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
+export function generateStaticParams() {
+  return []
+}
+
 type DocumentInfo = {
   id: string
   file_name: string

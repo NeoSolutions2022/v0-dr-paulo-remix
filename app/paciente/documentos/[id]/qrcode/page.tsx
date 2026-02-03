@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { QrCode, Download, ArrowLeft, Shield } from 'lucide-react'
 
+export function generateStaticParams() {
+  return []
+}
+
 type DocumentInfo = {
   id: string
   patient_id: string

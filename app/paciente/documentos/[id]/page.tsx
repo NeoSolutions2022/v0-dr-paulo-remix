@@ -12,6 +12,10 @@ import { HtmlDocumentViewer } from "@/components/patient/html-document-viewer"
 import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { createClient } from "@/lib/supabase/client"
 
+export function generateStaticParams() {
+  return []
+}
+
 type PatientDocument = {
   id: string
   patient_id: string
