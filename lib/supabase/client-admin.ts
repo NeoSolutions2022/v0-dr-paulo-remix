@@ -1,8 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
 
-const DEFAULT_SUPABASE_URL = "https://fhznxprnzdswjzpesgal.supabase.co"
-const DEFAULT_SERVICE_ROLE_KEY = "sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5"
-
 let adminClient: ReturnType<typeof createClient> | null = null
 
 export function createAdminBrowserClient() {
@@ -10,8 +7,12 @@ export function createAdminBrowserClient() {
     return adminClient
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
-  const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_ROLE_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY")
+  }
 
   adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
