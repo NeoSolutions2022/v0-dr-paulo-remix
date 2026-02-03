@@ -54,7 +54,6 @@ interface Patient {
   email: string | null
   birth_date: string | null
   cpf?: string | null
-  phone?: string | null
   created_at?: string
   updated_at?: string
   documents?: PatientDocument[]
@@ -251,7 +250,7 @@ export default function AdminHomePage() {
       let query = adminClient
         .from("patients")
         .select(
-          "id, full_name, email, birth_date, cpf, phone, created_at, updated_at, documents (id, patient_id, file_name, created_at, clean_text, pdf_url, html)",
+          "id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id, file_name, created_at, clean_text, pdf_url, html)",
         )
         .order("created_at", { ascending: false })
         .order("created_at", { foreignTable: "documents", ascending: false })
@@ -297,7 +296,7 @@ export default function AdminHomePage() {
         .from("patients")
         .update(payload)
         .eq("id", selectedPatient.id)
-        .select("id, full_name, email, birth_date, cpf, phone, created_at, updated_at")
+        .select("id, full_name, email, birth_date, cpf, created_at, updated_at")
         .single()
 
       if (error) {

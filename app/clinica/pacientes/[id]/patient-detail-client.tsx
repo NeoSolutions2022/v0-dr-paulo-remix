@@ -13,7 +13,6 @@ interface Patient {
   full_name: string
   cpf: string
   email: string | null
-  phone: string | null
   birth_date: string | null
   created_at: string
   observations: string | null
@@ -122,12 +121,6 @@ export function PatientDetailClient() {
               <div>
                 <p className="text-sm text-gray-500">E-mail</p>
                 <p className="font-medium">{patient.email}</p>
-              </div>
-            )}
-            {patient.phone && (
-              <div>
-                <p className="text-sm text-gray-500">Telefone</p>
-                <p className="font-medium">{patient.phone}</p>
               </div>
             )}
             {patient.birth_date && (

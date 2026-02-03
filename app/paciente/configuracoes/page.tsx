@@ -7,13 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { User, Mail, Phone, Calendar, Shield, Key } from 'lucide-react'
+import { User, Mail, Calendar, Shield, Key } from 'lucide-react'
 
 interface PatientProfile {
   id: string
   full_name: string | null
   cpf: string | null
-  phone: string | null
   birth_date: string | null
   created_at?: string | null
 }
@@ -45,7 +44,7 @@ export default function ConfiguracoesPage() {
 
       const { data: patientData } = await supabase
         .from("patients")
-        .select("id, full_name, cpf, phone, birth_date, created_at")
+        .select("id, full_name, cpf, birth_date, created_at")
         .eq("id", user.id)
         .single()
 
@@ -100,19 +99,6 @@ export default function ConfiguracoesPage() {
                   id="email"
                   type="email"
                   defaultValue={userEmail ?? ""}
-                  readOnly
-                  className="bg-slate-50 dark:bg-slate-900"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="phone" className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Telefone
-                </Label>
-                <Input
-                  id="phone"
-                  defaultValue={patient?.phone || "Não informado"}
                   readOnly
                   className="bg-slate-50 dark:bg-slate-900"
                 />

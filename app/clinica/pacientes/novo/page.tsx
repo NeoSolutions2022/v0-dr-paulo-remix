@@ -17,7 +17,6 @@ export default function NovoPatientePage() {
   const [name, setName] = useState('')
   const [cpf, setCpf] = useState('')
   const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [customPassword, setCustomPassword] = useState('')
   const [autoPassword, setAutoPassword] = useState(true)
@@ -98,7 +97,6 @@ export default function NovoPatientePage() {
         full_name: name,
         cpf: cpfClean,
         email: email || null,
-        phone: phone || null,
         birth_date: birthDate || null,
         first_access: true,
       })
@@ -198,7 +196,6 @@ export default function NovoPatientePage() {
                   setName('')
                   setCpf('')
                   setEmail('')
-                  setPhone('')
                   setBirthDate('')
                   setCustomPassword('')
                 }}
@@ -265,16 +262,6 @@ export default function NovoPatientePage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@exemplo.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefone (opcional)</Label>
-                <Input
-                  id="phone"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(00) 00000-0000"
                 />
               </div>
 

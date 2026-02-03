@@ -13,7 +13,6 @@ interface Patient {
   id: string
   full_name: string
   cpf: string
-  phone: string | null
   created_at: string
 }
 
@@ -41,7 +40,7 @@ export default function ClinicPatientsPage() {
 
         const { data, error } = await supabase
           .from('patients')
-          .select('id, full_name, cpf, phone, created_at')
+          .select('id, full_name, cpf, created_at')
           .eq('clinic_id', clinicUser.clinic_id)
           .order('created_at', { ascending: false })
 
@@ -107,9 +106,6 @@ export default function ClinicPatientsPage() {
                     <div>
                       <h3 className="font-semibold">{patient.full_name}</h3>
                       <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
-                      {patient.phone && (
-                        <p className="text-sm text-gray-600">Tel: {patient.phone}</p>
-                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">

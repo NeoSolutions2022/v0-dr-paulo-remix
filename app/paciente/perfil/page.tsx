@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User, Mail, Phone, Calendar, Shield, Save, Lock } from 'lucide-react';
+import { User, Mail, Calendar, Shield, Save, Lock } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 export default function PerfilPage() {
@@ -29,7 +29,6 @@ export default function PerfilPage() {
   
   const [formData, setFormData] = useState({
     full_name: '',
-    phone: '',
     email: '',
     lgpd_consent: false,
     notification_email: true,
@@ -65,7 +64,6 @@ export default function PerfilPage() {
         setPatient(patientData);
         setFormData({
           full_name: patientData.full_name || '',
-          phone: patientData.phone || '',
           email: patientData.email || authUser.email || '',
           lgpd_consent: patientData.lgpd_consent || false,
           notification_email: patientData.notification_preferences?.email ?? true,
@@ -83,7 +81,6 @@ export default function PerfilPage() {
         .from("patients")
         .update({
           full_name: formData.full_name,
-          phone: formData.phone,
           email: formData.email,
           lgpd_consent: formData.lgpd_consent,
           lgpd_consent_date: formData.lgpd_consent ? new Date().toISOString() : null,
@@ -202,16 +199,6 @@ export default function PerfilPage() {
                 />
               </div>
               
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="(00) 00000-0000"
-                />
-              </div>
-
               <div className="grid gap-2">
                 <Label htmlFor="cpf">CPF</Label>
                 <Input
