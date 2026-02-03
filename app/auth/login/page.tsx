@@ -12,9 +12,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter } from 'next/navigation';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileText } from 'lucide-react';
-import { redirect } from 'next/navigation'
 
 export default function Page() {
   const [identifier, setIdentifier] = useState("");
@@ -156,5 +155,11 @@ export default function Page() {
 }
 
 export function PatientLoginPage() {
-  redirect('/login')
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/login");
+  }, [router]);
+
+  return null;
 }

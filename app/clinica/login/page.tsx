@@ -1,18 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { AlertCircle, Loader2 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { redirect } from 'next/navigation'
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function ClinicLoginPage() {
-  redirect('/login')
+  const router = useRouter()
+
+  useEffect(() => {
+    router.replace("/login")
+  }, [router])
+
+  return null
 }
 
 // const router = useRouter()

@@ -123,7 +123,6 @@ export function DocumentoClient({ id }: { id: string }) {
           <HtmlDocumentViewer html={document.html} fileName={document.file_name} />
         </CardContent>
       </Card>
-
     </div>
   )
 }

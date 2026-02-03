@@ -99,7 +99,7 @@ export default function ClinicPatientsPage() {
               {filteredPatients.map((patient) => (
                 <Link
                   key={patient.id}
-                  href={`/clinica/pacientes/${patient.id}`}
+                  href={`/clinica/pacientes/detalhe?id=${patient.id}`}
                   className="block p-4 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-colors"
                 >
                   <div className="flex items-center justify-between">

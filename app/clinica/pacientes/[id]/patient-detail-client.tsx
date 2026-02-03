@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,9 +28,9 @@ interface Document {
 }
 
 export function PatientDetailClient() {
-  const params = useParams()
   const router = useRouter()
-  const patientId = params.id as string
+  const searchParams = useSearchParams()
+  const patientId = searchParams.get('id') || ''
 
   const [patient, setPatient] = useState<Patient | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -39,6 +39,11 @@ export function PatientDetailClient() {
   useEffect(() => {
     async function loadPatient() {
       try {
+        if (!patientId) {
+          setLoading(false)
+          return
+        }
+
         const supabase = createBrowserClient()
 
         // Carregar dados do paciente

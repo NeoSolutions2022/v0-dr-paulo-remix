@@ -89,7 +89,7 @@ export default function PatientReportsPage() {
 
                   <div className="flex gap-2 flex-wrap justify-end">
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/paciente/documentos/${doc.id}`}>
+                      <Link href={`/paciente/documentos/detalhe?id=${doc.id}`}>
                         <Eye className="h-4 w-4 mr-1" /> Ver
                       </Link>
                     </Button>
