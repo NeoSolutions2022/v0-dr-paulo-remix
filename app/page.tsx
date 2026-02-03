@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -69,6 +69,7 @@ export default function AdminHomePage() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [pageSize, setPageSize] = useState(200)
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [savingPatient, setSavingPatient] = useState(false)
   const [savingDocument, setSavingDocument] = useState(false)
@@ -92,6 +93,8 @@ export default function AdminHomePage() {
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const uploadSectionId = "admin-upload-section"
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
+  const remoteSearchRef = useRef("")
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedPatient = useMemo(
     () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
@@ -156,7 +159,6 @@ export default function AdminHomePage() {
       }
 
       setCheckingAuth(false)
-      await loadPatients()
     }
 
     verifySession()
@@ -177,12 +179,21 @@ export default function AdminHomePage() {
     }, 150)
   }
 
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async (options?: { search?: string; limit?: number }) => {
     setLoadingPatients(true)
     setError("")
 
     try {
-      const response = await fetch("/api/admin/patients")
+      const params = new URLSearchParams()
+      const nextLimit = options?.limit ?? pageSize
+      if (Number.isFinite(nextLimit)) {
+        params.set("limit", String(nextLimit))
+      }
+      if (options?.search) {
+        params.set("search", options.search)
+      }
+      const query = params.toString()
+      const response = await fetch(`/api/admin/patients${query ? `?${query}` : ""}`)
       const data = await response.json()
 
       if (!response.ok) {
@@ -196,7 +207,7 @@ export default function AdminHomePage() {
     } finally {
       setLoadingPatients(false)
     }
-  }
+  }, [pageSize])
 
   const handlePatientUpdate = async (formData: Partial<Patient>) => {
     if (!selectedPatient) return
@@ -366,6 +377,43 @@ export default function AdminHomePage() {
     }
     setPreviewMedicalSummary(extractMedicalSummary(previewHtml))
   }, [previewHtml])
+
+  useEffect(() => {
+    if (checkingAuth) return
+    const trimmedSearch = search.trim()
+    if (trimmedSearch) return
+    loadPatients({ limit: pageSize })
+  }, [checkingAuth, loadPatients, pageSize, search])
+
+  useEffect(() => {
+    const trimmedSearch = search.trim()
+    if (!trimmedSearch) {
+      remoteSearchRef.current = ""
+      return
+    }
+
+    const normalizedSearch = trimmedSearch.toLowerCase()
+    const localMatch = patients.some((patient) =>
+      patient.full_name.toLowerCase().includes(normalizedSearch),
+    )
+
+    if (localMatch || remoteSearchRef.current === trimmedSearch) return
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      remoteSearchRef.current = trimmedSearch
+      loadPatients({ search: trimmedSearch, limit: pageSize })
+    }, 350)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [loadPatients, pageSize, patients, search])
 
   const handleSaveMedicalSummary = async () => {
     if (!previewPatient || !previewHtml) return
@@ -582,6 +630,23 @@ export default function AdminHomePage() {
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Buscar paciente"
                 />
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Label htmlFor="page-size" className="text-xs">
+                  Itens por página
+                </Label>
+                <select
+                  id="page-size"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                >
+                  {[50, 100, 200, 500].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
               </div>
             </CardHeader>
             <CardContent className="p-0">

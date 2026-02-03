@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,8 +13,8 @@ import { Lock, LogIn, Loader2 } from 'lucide-react'
 function AdminLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [email, setEmail] = useState('paulo@doutor')
-  const [password, setPassword] = useState('Drpaulov0')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -106,6 +107,13 @@ function AdminLoginPage() {
                 </>
               )}
             </Button>
+
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-semibold text-blue-900">
+              É paciente?{' '}
+              <Link href="/login" className="underline underline-offset-4">
+                Clique aqui para acessar painel do paciente
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>
