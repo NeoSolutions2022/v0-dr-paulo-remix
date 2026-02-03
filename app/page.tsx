@@ -28,6 +28,15 @@ import {
   X,
 } from "lucide-react"
 import { sanitizeHtml } from "@/lib/html-sanitizer"
+import { cleanMedicalText } from "@/lib/clean/medical-text"
+import { extractPatientData } from "@/lib/parsers/patient"
+import { createAdminBrowserClient } from "@/lib/supabase/client-admin"
+import {
+  clearAdminSession,
+  hasValidAdminSession,
+  readAdminSession,
+} from "@/lib/admin-auth-client"
+import { callGemini } from "@/lib/gemini/medical-report"
 
 interface PatientDocument {
   id: string
@@ -95,6 +104,7 @@ export default function AdminHomePage() {
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
   const remoteSearchRef = useRef("")
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const adminClient = useMemo(() => createAdminBrowserClient(), [])
 
   const selectedPatient = useMemo(
     () => patients.find((patient) => patient.id === selectedPatientId) ?? patients[0],
@@ -150,10 +160,61 @@ export default function AdminHomePage() {
     !!value &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 
+  const slugifyName = (name: string) => {
+    const slug = name
+      .normalize("NFD")
+      .replace(/[^a-zA-Z\s]/g, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ".")
+      .replace(/\.+/g, ".")
+      .replace(/^\.|\.$/g, "")
+
+    return slug.slice(0, 60)
+  }
+
+  const getOrCreateAuthUser = async (email: string, password: string) => {
+    const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    })
+
+    if (listError) {
+      throw listError
+    }
+
+    const existingUser = usersData?.users?.find((user) => user.email?.toLowerCase() === email.toLowerCase())
+    if (existingUser) {
+      const { data: updatedUser, error: updateError } = await adminClient.auth.admin.updateUserById(
+        existingUser.id,
+        {
+          password,
+          email_confirm: true,
+        },
+      )
+
+      if (updateError) {
+        throw updateError
+      }
+
+      return updatedUser?.user || existingUser
+    }
+
+    const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    })
+
+    if (!createError && created?.user) return created.user
+
+    throw createError || new Error("Falha ao criar usuário")
+  }
+
   useEffect(() => {
     const verifySession = async () => {
-      const response = await fetch("/api/admin/session")
-      if (!response.ok) {
+      const token = readAdminSession()
+      if (!hasValidAdminSession(token)) {
         router.push("/admin/login")
         return
       }
@@ -184,30 +245,40 @@ export default function AdminHomePage() {
     setError("")
 
     try {
-      const params = new URLSearchParams()
       const nextLimit = options?.limit ?? pageSize
-      if (Number.isFinite(nextLimit)) {
-        params.set("limit", String(nextLimit))
-      }
-      if (options?.search) {
-        params.set("search", options.search)
-      }
-      const query = params.toString()
-      const response = await fetch(`/api/admin/patients${query ? `?${query}` : ""}`)
-      const data = await response.json()
+      const searchTerm = options?.search?.trim()
 
-      if (!response.ok) {
-        throw new Error(data.error || "Não foi possível carregar os pacientes")
+      let query = adminClient
+        .from("patients")
+        .select(
+          "id, full_name, email, birth_date, cpf, phone, created_at, updated_at, documents (id, patient_id, file_name, created_at, clean_text, pdf_url, html)",
+        )
+        .order("created_at", { ascending: false })
+        .order("created_at", { foreignTable: "documents", ascending: false })
+
+      if (Number.isFinite(nextLimit)) {
+        query = query.limit(nextLimit)
       }
-      setPatients(data.patients || [])
-      setSelectedPatientId(data.patients?.[0]?.id ?? null)
-      setSelectedDocumentId(data.patients?.[0]?.documents?.[0]?.id ?? null)
+
+      if (searchTerm) {
+        const like = `%${searchTerm}%`
+        query = query.or(`full_name.ilike.${like},email.ilike.${like}`)
+      }
+
+      const { data, error } = await query
+      if (error) {
+        throw error
+      }
+
+      setPatients(data || [])
+      setSelectedPatientId(data?.[0]?.id ?? null)
+      setSelectedDocumentId(data?.[0]?.documents?.[0]?.id ?? null)
     } catch (err: any) {
       setError(err.message || "Erro ao buscar pacientes")
     } finally {
       setLoadingPatients(false)
     }
-  }, [pageSize])
+  }, [adminClient, pageSize])
 
   const handlePatientUpdate = async (formData: Partial<Patient>) => {
     if (!selectedPatient) return
@@ -216,23 +287,25 @@ export default function AdminHomePage() {
     setError("")
 
     try {
-      const response = await fetch(`/api/admin/patients/${selectedPatient.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: formData.full_name ?? selectedPatient.full_name,
-          email: formData.email ?? selectedPatient.email,
-          birth_date: formData.birth_date ?? selectedPatient.birth_date,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao atualizar paciente")
+      const payload = {
+        full_name: formData.full_name ?? selectedPatient.full_name,
+        email: formData.email ?? selectedPatient.email,
+        birth_date: formData.birth_date ?? selectedPatient.birth_date,
       }
+
+      const { data, error } = await adminClient
+        .from("patients")
+        .update(payload)
+        .eq("id", selectedPatient.id)
+        .select("id, full_name, email, birth_date, cpf, phone, created_at, updated_at")
+        .single()
+
+      if (error) {
+        throw error
+      }
+
       setPatients((prev) =>
-        prev.map((patient) => (patient.id === selectedPatient.id ? { ...patient, ...data.patient } : patient)),
+        prev.map((patient) => (patient.id === selectedPatient.id ? { ...patient, ...data } : patient)),
       )
       setSuccessMessage("Dados do paciente atualizados com sucesso")
     } catch (err: any) {
@@ -248,21 +321,27 @@ export default function AdminHomePage() {
     setHtmlError("")
 
     try {
-      const response = await fetch(
-        `/api/documents/${selectedDocument.id}/generate-html${force ? "?force=true" : ""}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ force }),
-        },
-      )
-
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao gerar HTML")
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) {
+        throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
+      }
+      const cleanText = selectedDocument.clean_text || ""
+      if (!cleanText.trim()) {
+        throw new Error("Relatório sem texto para processamento")
       }
 
-      const nextHtml = typeof data.html === "string" ? data.html : ""
+      const geminiResponse = await callGemini(cleanText, apiKey)
+      const nextHtml = sanitizeHtml(geminiResponse.rawText)
+
+      const { error: updateError } = await adminClient
+        .from("documents")
+        .update({ html: nextHtml })
+        .eq("id", selectedDocument.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
       setHtmlPreview(nextHtml || null)
       setPatients((prev) =>
         prev.map((patient) =>
@@ -307,16 +386,26 @@ export default function AdminHomePage() {
     }
 
     try {
-      const response = await fetch(`/api/documents/${document.id}/generate-html`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: false }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao carregar HTML")
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) {
+        throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
       }
-      const nextHtml = typeof data.html === "string" ? data.html : ""
+      const cleanText = document.clean_text || ""
+      if (!cleanText.trim()) {
+        throw new Error("Relatório sem texto para processamento")
+      }
+
+      const geminiResponse = await callGemini(cleanText, apiKey)
+      const nextHtml = sanitizeHtml(geminiResponse.rawText)
+
+      const { error: updateError } = await adminClient
+        .from("documents")
+        .update({ html: nextHtml })
+        .eq("id", document.id)
+
+      if (updateError) {
+        throw updateError
+      }
       setPreviewHtml(nextHtml || null)
       setPatients((prev) =>
         prev.map((entry) =>
@@ -435,30 +524,29 @@ export default function AdminHomePage() {
     const updatedHtml = updateMedicalSummaryHtml(previewHtml, previewMedicalSummary)
 
     try {
-      const response = await fetch(`/api/admin/documents/${document.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { data, error } = await adminClient
+        .from("documents")
+        .update({
           html: updatedHtml,
           file_name: document.file_name,
           clean_text: document.clean_text,
-        }),
-      })
+        })
+        .eq("id", document.id)
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .single()
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao atualizar resumo médico")
+      if (error) {
+        throw error
       }
 
-      setPreviewHtml(data.document?.html ?? updatedHtml)
+      setPreviewHtml(data?.html ?? updatedHtml)
       setPatients((prev) =>
         prev.map((patient) =>
           patient.id === previewPatient.id
             ? {
                 ...patient,
                 documents: patient.documents?.map((doc) =>
-                  doc.id === document.id ? data.document : doc,
+                  doc.id === document.id ? data : doc,
                 ),
               }
             : patient,
@@ -483,27 +571,23 @@ export default function AdminHomePage() {
 
     try {
       console.info("[admin] Salvando documento", { documentId: selectedDocument.id })
-      const response = await fetch(`/api/admin/documents/${selectedDocument.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { data, error } = await adminClient
+        .from("documents")
+        .update({
           file_name: changes.file_name ?? selectedDocument.file_name,
           clean_text: changes.clean_text ?? selectedDocument.clean_text,
-        }),
-      })
+        })
+        .eq("id", selectedDocument.id)
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .single()
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao atualizar documento")
+      if (error) {
+        throw error
       }
       setPatients((prev) =>
         prev.map((patient) =>
           patient.id === selectedPatient?.id
-            ? {
-                ...patient,
-                documents: patient.documents?.map((doc) => (doc.id === selectedDocument.id ? data.document : doc)),
-              }
+            ? { ...patient, documents: patient.documents?.map((doc) => (doc.id === selectedDocument.id ? data : doc)) }
             : patient,
         ),
       )
@@ -536,19 +620,101 @@ export default function AdminHomePage() {
     setSuccessMessage("")
 
     try {
-      const response = await fetch("/api/process-and-register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: uploadText, sourceName: uploadFileName || "relatorio.txt" }),
-      })
+      const { cleanText } = cleanMedicalText(uploadText)
+      const parsed = extractPatientData(cleanText)
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao processar relatório")
+      if (parsed.missing.length > 0) {
+        throw new Error("Não foi possível extrair nome completo e data de nascimento do relatório")
       }
 
-      setUploadResult(data)
+      const password = parsed.birthDate!.replace(/-/g, "")
+      const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
+      const authUser = await getOrCreateAuthUser(loginEmail, password)
+
+      const { data: existingPatient, error: existingPatientError } = await adminClient
+        .from("patients")
+        .select("id, full_name, cpf, birth_date")
+        .eq("full_name", parsed.fullName)
+        .eq("birth_date", parsed.birthDate)
+        .maybeSingle()
+
+      if (existingPatientError) {
+        throw existingPatientError
+      }
+
+      let patientId = authUser.id
+      let patientExists = false
+
+      if (existingPatient) {
+        patientExists = true
+        if (existingPatient.id !== authUser.id) {
+          const { error: updatePatientIdError } = await adminClient
+            .from("patients")
+            .update({ id: authUser.id })
+            .eq("id", existingPatient.id)
+
+          if (updatePatientIdError) {
+            throw updatePatientIdError
+          }
+
+          const { error: updateDocsError } = await adminClient
+            .from("documents")
+            .update({ patient_id: authUser.id })
+            .eq("patient_id", existingPatient.id)
+
+          if (updateDocsError) {
+            throw updateDocsError
+          }
+        }
+      } else {
+        const { error: patientError } = await adminClient.from("patients").insert({
+          id: authUser.id,
+          full_name: parsed.fullName,
+          cpf: null,
+          birth_date: parsed.birthDate,
+          first_access: true,
+          source_name: uploadFileName || "relatorio.txt",
+        })
+
+        if (patientError) {
+          throw patientError
+        }
+      }
+
+      patientId = authUser.id
+
+      const { data: document, error: documentError } = await adminClient
+        .from("documents")
+        .insert({
+          patient_id: patientId,
+          file_name: uploadFileName || "relatorio.txt",
+          clean_text: cleanText,
+          category: "Relatório",
+        })
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .single()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      setUploadResult({
+        cleanText,
+        credentials: {
+          loginName: loginEmail,
+          password,
+          existing: patientExists,
+        },
+        message: document ? "Documento registrado com sucesso." : undefined,
+        patient: {
+          id: patientId,
+          full_name: parsed.fullName!,
+          email: null,
+          birth_date: parsed.birthDate!,
+          documents: document ? [document] : [],
+        },
+        document,
+      })
       setSuccessMessage("Relatório processado e login criado com sucesso")
       await loadPatients()
     } catch (err: any) {
@@ -566,7 +732,7 @@ export default function AdminHomePage() {
   }, [patients, search])
 
   const handleLogout = async () => {
-    await fetch("/api/admin/logout", { method: "POST" })
+    clearAdminSession()
     router.push("/admin/login")
   }
 

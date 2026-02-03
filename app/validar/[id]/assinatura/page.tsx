@@ -1,22 +1,38 @@
-import { createClient } from "@/lib/supabase/server"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { ShieldCheck, FileText, Fingerprint, AlertTriangle } from 'lucide-react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 
-export default async function SignaturePage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const supabase = await createClient()
+type SignatureDocument = {
+  id: string
+  file_name: string
+  created_at: string
+  hash_sha256: string | null
+}
 
-  const { data: doc } = await supabase
-    .from("documents")
-    .select("id, file_name, created_at, hash_sha256")
-    .eq("id", id)
-    .single()
+export default function SignaturePage() {
+  const params = useParams<{ id: string }>()
+  const [doc, setDoc] = useState<SignatureDocument | null>(null)
+
+  useEffect(() => {
+    const loadDoc = async () => {
+      if (!params?.id) return
+      const supabase = createBrowserClient()
+      const { data } = await supabase
+        .from("documents")
+        .select("id, file_name, created_at, hash_sha256")
+        .eq("id", params.id)
+        .single()
+      setDoc(data || null)
+    }
+
+    loadDoc()
+  }, [params])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -123,7 +139,7 @@ export default async function SignaturePage({
               </div>
 
               <Button asChild className="w-full" variant="outline">
-                <Link href={`/validar/${id}`}>
+                <Link href={`/validar/${params?.id}`}>
                   Voltar para Validação
                 </Link>
               </Button>

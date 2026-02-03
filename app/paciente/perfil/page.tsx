@@ -28,7 +28,7 @@ export default function PerfilPage() {
   const [user, setUser] = useState<any>(null);
   
   const [formData, setFormData] = useState({
-    name: '',
+    full_name: '',
     phone: '',
     email: '',
     lgpd_consent: false,
@@ -64,7 +64,7 @@ export default function PerfilPage() {
       if (patientData) {
         setPatient(patientData);
         setFormData({
-          name: patientData.name || '',
+          full_name: patientData.full_name || '',
           phone: patientData.phone || '',
           email: patientData.email || authUser.email || '',
           lgpd_consent: patientData.lgpd_consent || false,
@@ -82,7 +82,7 @@ export default function PerfilPage() {
       const { error } = await supabase
         .from("patients")
         .update({
-          name: formData.name,
+          full_name: formData.full_name,
           phone: formData.phone,
           email: formData.email,
           lgpd_consent: formData.lgpd_consent,
@@ -187,8 +187,8 @@ export default function PerfilPage() {
                 <Label htmlFor="name">Nome Completo</Label>
                 <Input
                   id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                 />
               </div>
               

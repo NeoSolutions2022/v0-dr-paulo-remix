@@ -9,6 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Lock, LogIn, Loader2 } from 'lucide-react'
+import {
+  isValidAdminCredentials,
+  persistAdminSession,
+  readAdminSession,
+  hasValidAdminSession,
+} from '@/lib/admin-auth-client'
 
 function AdminLoginPage() {
   const router = useRouter()
@@ -20,8 +26,8 @@ function AdminLoginPage() {
 
   useEffect(() => {
     const checkSession = async () => {
-      const response = await fetch('/api/admin/session')
-      if (response.ok) {
+      const token = readAdminSession()
+      if (hasValidAdminSession(token)) {
         router.push(searchParams.get('redirectTo') || '/')
       }
     }
@@ -35,17 +41,11 @@ function AdminLoginPage() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Falha ao autenticar')
+      if (!isValidAdminCredentials(email, password)) {
+        throw new Error('Credenciais inválidas')
       }
 
+      persistAdminSession()
       router.push(searchParams.get('redirectTo') || '/')
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login')

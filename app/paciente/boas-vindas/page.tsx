@@ -1,36 +1,53 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import Link from "next/link";
-import { redirect } from 'next/navigation';
-import { createClient } from "@/lib/supabase/server";
+import { useRouter } from 'next/navigation';
+import { createBrowserClient } from "@/lib/supabase/client";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Heart, Shield, TrendingUp, FileCheck } from 'lucide-react';
 
-export default async function WelcomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+type PatientWelcome = {
+  full_name: string | null
+  first_access: boolean | null
+}
 
-  if (error || !user) {
-    redirect("/auth/login");
-  }
+export default function WelcomePage() {
+  const router = useRouter()
+  const [patient, setPatient] = useState<PatientWelcome | null>(null)
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select("name, first_access")
-    .eq("id", user.id)
-    .single();
+  useEffect(() => {
+    const loadData = async () => {
+      const supabase = createBrowserClient()
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser()
 
-  if (!patient) {
-    redirect("/paciente/documentos");
-  }
+      if (error || !user) {
+        router.replace("/auth/login")
+        return
+      }
 
-  if (!patient.first_access) {
-    redirect("/paciente/documentos");
-  }
+      const { data: patientData } = await supabase
+        .from("patients")
+        .select("full_name, first_access")
+        .eq("id", user.id)
+        .single()
 
-  const firstName = (patient.name || "Paciente").split(" ")[0];
+      if (!patientData || !patientData.first_access) {
+        router.replace("/paciente/documentos")
+        return
+      }
+
+      setPatient(patientData)
+    }
+
+    loadData()
+  }, [router])
+
+  const firstName = (patient?.full_name || "Paciente").split(" ")[0];
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-blue-50 via-indigo-50 to-slate-50 dark:from-slate-950 dark:via-blue-950 dark:to-indigo-950">

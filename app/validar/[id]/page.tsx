@@ -1,23 +1,41 @@
-import { createClient } from "@/lib/supabase/server"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams } from "next/navigation"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileCheck, AlertTriangle, FileText, Calendar, Shield, Building2, CheckCircle2 } from 'lucide-react'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
-export default async function ValidatePage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
-  const supabase = await createClient()
+type DocumentInfo = {
+  id: string
+  file_name: string
+  created_at: string
+  pdf_url: string | null
+  hash_sha256: string | null
+  category: string | null
+}
 
-  const { data: doc } = await supabase
-    .from("documents")
-    .select("id, file_name, created_at, pdf_url, hash_sha256, category")
-    .eq("id", id)
-    .single()
+export default function ValidatePage() {
+  const params = useParams<{ id: string }>()
+  const [doc, setDoc] = useState<DocumentInfo | null>(null)
+
+  useEffect(() => {
+    const loadDocument = async () => {
+      const supabase = createBrowserClient()
+      if (!params?.id) return
+      const { data } = await supabase
+        .from("documents")
+        .select("id, file_name, created_at, pdf_url, hash_sha256, category")
+        .eq("id", params.id)
+        .single()
+      setDoc(data || null)
+    }
+
+    loadDocument()
+  }, [params])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900">
@@ -168,7 +186,7 @@ export default async function ValidatePage({
                 
                 {doc.hash_sha256 && (
                   <Button asChild variant="outline" className="flex-1">
-                    <Link href={`/validar/${id}/assinatura`}>
+                    <Link href={`/validar/${params?.id}/assinatura`}>
                       <Shield className="h-4 w-4 mr-2" />
                       Detalhes da Assinatura
                     </Link>

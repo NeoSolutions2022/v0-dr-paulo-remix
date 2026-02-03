@@ -61,10 +61,12 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
             .select("cpf, full_name")
             .eq("id", user.id)
             .maybeSingle(),
-          fetch(`/api/patient/documents?id=${encodeURIComponent(id)}`, {
-            credentials: "include",
-            cache: "no-store",
-          }),
+          supabase
+            .from("documents")
+            .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256, html")
+            .eq("id", id)
+            .eq("patient_id", user.id)
+            .maybeSingle(),
         ])
 
         if (patientResp.error) {
@@ -75,35 +77,17 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           setPatient(patientResp.data)
         }
 
-        if (documentResp.status === 401) {
-          router.replace("/auth/login")
-          return
+        if (documentResp.error) {
+          throw documentResp.error
         }
 
-        if (documentResp.status === 404) {
+        if (!documentResp.data) {
           setError("Documento não encontrado ou não pertence a você")
           setIsLoading(false)
           return
         }
 
-        if (!documentResp.ok) {
-          throw new Error("Não foi possível carregar o documento")
-        }
-
-        const { documents } = (await documentResp.json()) as {
-          documents: PatientDocument | PatientDocument[]
-        }
-
-        const documentData = Array.isArray(documents)
-          ? documents[0]
-          : documents
-
-        if (!documentData) {
-          setError("Documento não encontrado")
-          return
-        }
-
-        setDocument(documentData)
+        setDocument(documentResp.data)
       } catch (err: any) {
         console.error("Erro ao carregar documento do paciente", err)
         setError(err.message || "Falha ao carregar documento")

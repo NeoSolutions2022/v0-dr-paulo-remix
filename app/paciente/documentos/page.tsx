@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { HtmlDocumentViewer } from "@/components/patient/html-document-viewer"
+import { createBrowserClient } from "@/lib/supabase/client"
 
 type PatientDocument = {
   id: string
@@ -32,28 +33,29 @@ export default function DocumentListPage() {
 
   useEffect(() => {
     const fetchDocuments = async () => {
-      const response = await fetch('/api/patient/documents', {
-        credentials: 'include',
-        cache: 'no-store',
-      })
+      const supabase = createBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-      if (response.status === 401) {
-        router.replace('/auth/login')
+      if (!user) {
+        router.replace("/auth/login")
         return
       }
 
-      if (!response.ok) {
-        setError('Não foi possível carregar seus documentos. Tente novamente.')
+      const { data, error: documentsError } = await supabase
+        .from("documents")
+        .select("id, file_name, created_at, pdf_url, clean_text, html")
+        .eq("patient_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (documentsError) {
+        setError("Não foi possível carregar seus documentos. Tente novamente.")
         setIsLoading(false)
         return
       }
 
-      const { documents: fetchedDocuments } = (await response.json()) as {
-        documents: PatientDocument[]
-      }
-
-      setDocuments(fetchedDocuments || [])
-
+      setDocuments(data || [])
       setIsLoading(false)
     }
 

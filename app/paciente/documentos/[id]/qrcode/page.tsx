@@ -1,33 +1,76 @@
-import { createClient } from "@/lib/supabase/server"
-import { createAdminClient } from "@/lib/supabase/admin"
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { createBrowserClient } from "@/lib/supabase/client"
+import { createAdminBrowserClient } from "@/lib/supabase/client-admin"
 import QRCode from "qrcode"
-import { redirect } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { QrCode, Download, ArrowLeft, Shield } from 'lucide-react'
 
-export default async function QRDocumentPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const { id } = params
-  const supabase = await createClient()
-  const admin = createAdminClient()
+type DocumentInfo = {
+  id: string
+  patient_id: string
+  file_name: string
+  created_at: string
+}
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export default function QRDocumentPage() {
+  const params = useParams<{ id: string }>()
+  const router = useRouter()
+  const [doc, setDoc] = useState<DocumentInfo | null>(null)
+  const [qrCode, setQrCode] = useState<string | null>(null)
+  const validationUrl = useMemo(() => {
+    if (!params?.id) return ""
+    return `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/validar/${params.id}`
+  }, [params?.id])
 
-  if (!user) redirect("/auth/login")
+  useEffect(() => {
+    const loadDocument = async () => {
+      const supabase = createBrowserClient()
+      const admin = createAdminBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-  const { data: doc } = await admin
-    .from("documents")
-    .select("id, patient_id, file_name, created_at")
-    .eq("id", id)
-    .eq("patient_id", user.id)
-    .maybeSingle()
+      if (!user) {
+        router.replace("/auth/login")
+        return
+      }
+
+      if (!params?.id) return
+
+      const { data } = await admin
+        .from("documents")
+        .select("id, patient_id, file_name, created_at")
+        .eq("id", params.id)
+        .eq("patient_id", user.id)
+        .maybeSingle()
+
+      setDoc(data || null)
+    }
+
+    loadDocument()
+  }, [params, router])
+
+  useEffect(() => {
+    const generateQr = async () => {
+      if (!validationUrl) return
+      const dataUrl = await QRCode.toDataURL(validationUrl, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: '#1e293b',
+          light: '#ffffff',
+        },
+      })
+      setQrCode(dataUrl)
+    }
+
+    generateQr()
+  }, [validationUrl])
 
   if (!doc) {
     return (
@@ -41,16 +84,6 @@ export default async function QRDocumentPage({
     )
   }
 
-  const validationUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/validar/${id}`
-  const qrCode = await QRCode.toDataURL(validationUrl, {
-    width: 400,
-    margin: 2,
-    color: {
-      dark: '#1e293b',
-      light: '#ffffff',
-    },
-  })
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -58,7 +91,7 @@ export default async function QRDocumentPage({
           QR Code de Validação
         </h1>
         <Button asChild variant="outline">
-          <Link href={`/paciente/documentos/${id}`}>
+          <Link href={`/paciente/documentos/${params?.id}`}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Link>
@@ -117,7 +150,7 @@ export default async function QRDocumentPage({
           {/* Actions */}
           <div className="flex gap-3">
             <Button asChild className="flex-1">
-              <a href={qrCode} download={`qrcode-${doc.file_name}.png`}>
+              <a href={qrCode ?? undefined} download={`qrcode-${doc.file_name}.png`}>
                 <Download className="h-4 w-4 mr-2" />
                 Baixar QR Code
               </a>

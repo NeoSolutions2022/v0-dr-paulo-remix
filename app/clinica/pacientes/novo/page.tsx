@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { UserPlus, Copy, Check, ArrowLeft } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { createBrowserClient } from '@/lib/supabase/client'
+import { createAdminBrowserClient } from '@/lib/supabase/client-admin'
 
 export default function NovoPatientePage() {
   const router = useRouter()
@@ -25,32 +27,96 @@ export default function NovoPatientePage() {
   const [credentials, setCredentials] = useState<{ cpf: string; password: string } | null>(null)
   const [copiedPassword, setCopiedPassword] = useState(false)
 
+  const generatePassword = (length = 12) => {
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*'
+    let password = ''
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    return password
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
     try {
-      const response = await fetch('/api/clinica/pacientes/criar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          cpf,
-          email,
-          phone,
-          birthDate,
-          password: autoPassword ? null : customPassword,
-        }),
-      })
+      const supabase = createBrowserClient()
+      const adminClient = createAdminBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao criar paciente')
+      if (!user) {
+        throw new Error('Sessão expirada. Faça login novamente.')
       }
 
-      setCredentials(data.credentials)
+      const { data: clinicUser, error: clinicUserError } = await supabase
+        .from('clinic_users')
+        .select('clinic_id, id')
+        .eq('id', user.id)
+        .single()
+
+      if (clinicUserError || !clinicUser) {
+        throw new Error('Acesso negado')
+      }
+
+      const cpfClean = cpf.replace(/\D/g, '')
+      if (cpfClean.length !== 11) {
+        throw new Error('CPF inválido')
+      }
+
+      const { data: existingPatient } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('cpf', cpfClean)
+        .eq('clinic_id', clinicUser.clinic_id)
+        .maybeSingle()
+
+      if (existingPatient) {
+        throw new Error('CPF já cadastrado nesta clínica')
+      }
+
+      const password = autoPassword ? generatePassword() : customPassword
+      const authEmail = `${cpfClean}@patients.local`
+
+      const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+        email: authEmail,
+        password,
+        email_confirm: true,
+      })
+
+      if (authError || !authData?.user) {
+        throw new Error(authError?.message || 'Erro ao criar usuário no Auth')
+      }
+
+      const { error: patientError } = await supabase.from('patients').insert({
+        id: authData.user.id,
+        clinic_id: clinicUser.clinic_id,
+        created_by: clinicUser.id,
+        full_name: name,
+        cpf: cpfClean,
+        email: email || null,
+        phone: phone || null,
+        birth_date: birthDate || null,
+        first_access: true,
+      })
+
+      if (patientError) {
+        throw patientError
+      }
+
+      await supabase.rpc('log_audit', {
+        p_clinic_id: clinicUser.clinic_id,
+        p_user_id: clinicUser.id,
+        p_patient_id: authData.user.id,
+        p_document_id: null,
+        p_action: 'patient_created',
+        p_details: { name, cpf: cpfClean },
+      })
+
+      setCredentials({ cpf: cpfClean, password })
       setSuccess(true)
     } catch (err: any) {
       console.error('[v0] Error:', err)

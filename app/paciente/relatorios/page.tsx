@@ -1,6 +1,9 @@
-import { redirect } from "next/navigation"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { createBrowserClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { FileText, Download, Eye } from "lucide-react"
@@ -12,22 +15,37 @@ interface PatientDocument {
   created_at: string
 }
 
-export default async function PatientReportsPage() {
-  const supabase = await createClient()
+export default function PatientReportsPage() {
+  const router = useRouter()
+  const [documents, setDocuments] = useState<PatientDocument[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  useEffect(() => {
+    const loadReports = async () => {
+      const supabase = createBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect("/login")
-  }
+      if (!user) {
+        router.replace("/login")
+        return
+      }
 
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("id, file_name, pdf_url, created_at")
-    .eq("patient_id", user.id)
-    .order("created_at", { ascending: false })
+      const { data, error } = await supabase
+        .from("documents")
+        .select("id, file_name, pdf_url, created_at")
+        .eq("patient_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (!error) {
+        setDocuments(data || [])
+      }
+      setLoading(false)
+    }
+
+    loadReports()
+  }, [router])
 
   return (
     <div className="space-y-8">
@@ -44,7 +62,11 @@ export default async function PatientReportsPage() {
           <CardDescription>Somente documentos associados ao seu CPF</CardDescription>
         </CardHeader>
         <CardContent>
-          {!documents || documents.length === 0 ? (
+          {loading ? (
+            <div className="text-sm text-slate-500 py-8 text-center">
+              Carregando relatórios...
+            </div>
+          ) : !documents || documents.length === 0 ? (
             <div className="text-sm text-slate-500 py-8 text-center">
               Nenhum relatório encontrado. Quando sua clínica enviar PDFs, eles aparecerão aqui.
             </div>
