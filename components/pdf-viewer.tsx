@@ -4,17 +4,16 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Download, ZoomIn, ZoomOut, Maximize2, Share2, QrCode, AlertTriangle } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, Maximize2, Share2, AlertTriangle } from 'lucide-react';
 
 interface PdfViewerProps {
   pdfUrl: string;
-  documentId: string;
   fileName: string;
   txtUrl?: string;
   zipUrl?: string;
 }
 
-export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfViewerProps) {
+export function PdfViewer({ pdfUrl, fileName, txtUrl, zipUrl }: PdfViewerProps) {
   const [zoom, setZoom] = useState(100);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -23,7 +22,7 @@ export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfV
       navigator.share({
         title: fileName,
         text: 'Confira este documento médico',
-        url: `/validar/${documentId}`,
+        url: pdfUrl,
       });
     }
   };
@@ -93,13 +92,6 @@ export function PdfViewer({ pdfUrl, documentId, fileName, txtUrl, zipUrl }: PdfV
               </Link>
             </Button>
           )}
-
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/paciente/documentos/${documentId}/qrcode`}>
-              <QrCode className="h-4 w-4 mr-1" />
-              QR Code
-            </Link>
-          </Button>
 
           <Button size="sm" variant="outline" onClick={handleShare}>
             <Share2 className="h-4 w-4 mr-1" />
