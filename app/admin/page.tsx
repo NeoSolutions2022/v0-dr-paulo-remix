@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -13,7 +13,6 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   AlertCircle,
   CheckCircle2,
-  Clipboard,
   FileText,
   Loader2,
   LogOut,
@@ -21,15 +20,10 @@ import {
   Printer,
   RefreshCw,
   Search,
-  Upload,
-  UserPlus,
   Users,
-  ListChecks,
   X,
 } from "lucide-react"
 import { sanitizeHtml } from "@/lib/html-sanitizer"
-import { cleanMedicalText } from "@/lib/clean/medical-text"
-import { extractPatientData } from "@/lib/parsers/patient"
 import { createAdminBrowserClient } from "@/lib/supabase/client-admin"
 import {
   clearAdminSession,
@@ -41,9 +35,9 @@ import { callGemini } from "@/lib/gemini/medical-report"
 interface PatientDocument {
   id: string
   patient_id: string
-  file_name: string
-  created_at: string
-  clean_text: string | null
+  file_name?: string
+  created_at?: string
+  clean_text?: string | null
   pdf_url?: string | null
   html?: string | null
 }
@@ -59,18 +53,6 @@ interface Patient {
   documents?: PatientDocument[]
 }
 
-interface UploadResult {
-  cleanText: string
-  credentials?: {
-    loginName?: string
-    password?: string
-    existing?: boolean
-  }
-  message?: string
-  patient?: Patient
-  document?: PatientDocument
-}
-
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -81,10 +63,6 @@ export default function AdminHomePage() {
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [savingPatient, setSavingPatient] = useState(false)
   const [savingDocument, setSavingDocument] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadFileName, setUploadFileName] = useState("")
-  const [uploadText, setUploadText] = useState("")
-  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -99,8 +77,6 @@ export default function AdminHomePage() {
   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
-  const uploadSectionId = "admin-upload-section"
-  const uploadFileInputRef = useRef<HTMLInputElement | null>(null)
   const remoteSearchRef = useRef("")
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const adminClient = useMemo(() => createAdminBrowserClient(), [])
@@ -225,20 +201,6 @@ export default function AdminHomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const scrollToUpload = () => {
-    const section = document.getElementById(uploadSectionId)
-    if (section) {
-      section.scrollIntoView({ behavior: "smooth", block: "start" })
-    }
-  }
-
-  const handleUploadShortcut = () => {
-    scrollToUpload()
-    window.setTimeout(() => {
-      uploadFileInputRef.current?.click()
-    }, 150)
-  }
-
   const loadPatients = useCallback(async (options?: { search?: string; limit?: number }) => {
     setLoadingPatients(true)
     setError("")
@@ -249,9 +211,7 @@ export default function AdminHomePage() {
 
       let query = adminClient
         .from("patients")
-        .select(
-          "id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id, file_name, created_at, clean_text, pdf_url, html)",
-        )
+        .select("id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id)")
         .order("created_at", { ascending: false })
         .order("created_at", { foreignTable: "documents", ascending: false })
 
@@ -363,28 +323,33 @@ export default function AdminHomePage() {
 
   const loadPreviewHtml = async (patientId: string) => {
     setPreviewLoading(true)
-    const patient = patients.find((entry) => entry.id === patientId)
-    const document =
-      patient?.documents?.find(
-        (doc) => doc.patient_id === patientId && isValidUuid(doc.id),
-      ) ?? null
-
-    setPreviewHtml(document?.html?.trim() ? document.html : null)
-    setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
-    setPreviewError("")
-
-    if (!document || !isValidUuid(document.id)) {
-      setPreviewError("Nenhum relatório disponível para este paciente.")
-      setPreviewLoading(false)
-      return
-    }
-
-    if (document.html?.trim()) {
-      setPreviewLoading(false)
-      return
-    }
 
     try {
+      const { data: document, error: documentError } = await adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      setPreviewHtml(document?.html?.trim() ? document.html : null)
+      setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
+      setPreviewError("")
+
+      if (!document || !isValidUuid(document.id)) {
+        setPreviewError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      if (document.html?.trim()) {
+        return
+      }
+
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) {
         throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
@@ -420,6 +385,79 @@ export default function AdminHomePage() {
       )
     } catch (err: any) {
       setPreviewError(err.message || "Erro ao carregar HTML")
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handleRegeneratePreviewHtml = async () => {
+    if (!previewPatient) return
+    setPreviewLoading(true)
+    setPreviewError("")
+    setError("")
+    setSuccessMessage("")
+
+    try {
+      let documentQuery = adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("patient_id", previewPatient.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (previewDocumentId && isValidUuid(previewDocumentId)) {
+        documentQuery = documentQuery.eq("id", previewDocumentId)
+      }
+
+      const { data: document, error: documentError } = await documentQuery.maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      if (!document?.id || !isValidUuid(document.id)) {
+        setPreviewError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) {
+        throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
+      }
+      const cleanText = document.clean_text || ""
+      if (!cleanText.trim()) {
+        throw new Error("Relatório sem texto para processamento")
+      }
+
+      const geminiResponse = await callGemini(cleanText, apiKey)
+      const nextHtml = sanitizeHtml(geminiResponse.rawText)
+
+      const { error: updateError } = await adminClient
+        .from("documents")
+        .update({ html: nextHtml })
+        .eq("id", document.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setPreviewHtml(nextHtml || null)
+      setPreviewDocumentId(document.id)
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === previewPatient.id
+            ? {
+                ...patient,
+                documents: patient.documents?.map((doc) =>
+                  doc.id === document.id ? { ...doc, html: nextHtml } : doc,
+                ),
+              }
+            : patient,
+        ),
+      )
+      setSuccessMessage("Relatório atualizado com sucesso")
+    } catch (err: any) {
+      setPreviewError(err.message || "Erro ao gerar relatório")
     } finally {
       setPreviewLoading(false)
     }
@@ -598,131 +636,6 @@ export default function AdminHomePage() {
     }
   }
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const text = await file.text()
-    setUploadFileName(file.name)
-    setUploadText(text)
-    setUploadResult(null)
-  }
-
-  const handleProcessUpload = async () => {
-    if (!uploadText.trim()) {
-      setError("Envie um arquivo .txt com o relatório do paciente")
-      return
-    }
-
-    setUploading(true)
-    setError("")
-    setSuccessMessage("")
-
-    try {
-      const { cleanText } = cleanMedicalText(uploadText)
-      const parsed = extractPatientData(cleanText)
-
-      if (parsed.missing.length > 0) {
-        throw new Error("Não foi possível extrair nome completo e data de nascimento do relatório")
-      }
-
-      const password = parsed.birthDate!.replace(/-/g, "")
-      const loginEmail = `${slugifyName(parsed.fullName!)}@patients.local`
-      const authUser = await getOrCreateAuthUser(loginEmail, password)
-
-      const { data: existingPatient, error: existingPatientError } = await adminClient
-        .from("patients")
-        .select("id, full_name, cpf, birth_date")
-        .eq("full_name", parsed.fullName)
-        .eq("birth_date", parsed.birthDate)
-        .maybeSingle()
-
-      if (existingPatientError) {
-        throw existingPatientError
-      }
-
-      let patientId = authUser.id
-      let patientExists = false
-
-      if (existingPatient) {
-        patientExists = true
-        if (existingPatient.id !== authUser.id) {
-          const { error: updatePatientIdError } = await adminClient
-            .from("patients")
-            .update({ id: authUser.id })
-            .eq("id", existingPatient.id)
-
-          if (updatePatientIdError) {
-            throw updatePatientIdError
-          }
-
-          const { error: updateDocsError } = await adminClient
-            .from("documents")
-            .update({ patient_id: authUser.id })
-            .eq("patient_id", existingPatient.id)
-
-          if (updateDocsError) {
-            throw updateDocsError
-          }
-        }
-      } else {
-        const { error: patientError } = await adminClient.from("patients").insert({
-          id: authUser.id,
-          full_name: parsed.fullName,
-          cpf: null,
-          birth_date: parsed.birthDate,
-          first_access: true,
-          source_name: uploadFileName || "relatorio.txt",
-        })
-
-        if (patientError) {
-          throw patientError
-        }
-      }
-
-      patientId = authUser.id
-
-      const { data: document, error: documentError } = await adminClient
-        .from("documents")
-        .insert({
-          patient_id: patientId,
-          file_name: uploadFileName || "relatorio.txt",
-          clean_text: cleanText,
-          category: "Relatório",
-        })
-        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
-        .single()
-
-      if (documentError) {
-        throw documentError
-      }
-
-      setUploadResult({
-        cleanText,
-        credentials: {
-          loginName: loginEmail,
-          password,
-          existing: patientExists,
-        },
-        message: document ? "Documento registrado com sucesso." : undefined,
-        patient: {
-          id: patientId,
-          full_name: parsed.fullName!,
-          email: null,
-          birth_date: parsed.birthDate!,
-          documents: document ? [document] : [],
-        },
-        document,
-      })
-      setSuccessMessage("Relatório processado e login criado com sucesso")
-      await loadPatients()
-    } catch (err: any) {
-      setError(err.message || "Erro ao processar arquivo")
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const filteredPatients = useMemo(() => {
     if (!search.trim()) return patients
     return patients.filter((patient) =>
@@ -754,15 +667,12 @@ export default function AdminHomePage() {
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" onClick={handleUploadShortcut}>
-                <Upload className="mr-2 h-4 w-4" /> Upload de relatório
-              </Button>
               <Button variant="outline" onClick={loadPatients} disabled={loadingPatients}>
                 {loadingPatients ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Atualizando
                   </>
-              ) : (
+                ) : (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4" /> Atualizar lista
                 </>
@@ -864,337 +774,7 @@ export default function AdminHomePage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-6">
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <PenSquare className="h-5 w-5 text-blue-600" /> Dados do paciente
-                </CardTitle>
-                <CardDescription>Edite informações básicas e salve em tempo real</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="full_name">Nome completo</Label>
-                    <Input
-                      id="full_name"
-                      value={selectedPatient?.full_name || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
-                          prev.map((patient) =>
-                            patient.id === selectedPatient?.id
-                              ? { ...patient, full_name: event.target.value }
-                              : patient,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={selectedPatient?.email || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
-                          prev.map((patient) =>
-                            patient.id === selectedPatient?.id
-                              ? { ...patient, email: event.target.value }
-                              : patient,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="birth_date">Data de nascimento</Label>
-                    <Input
-                      id="birth_date"
-                      type="date"
-                      value={selectedPatient?.birth_date || ""}
-                      onChange={(event) =>
-                        setPatients((prev) =>
-                          prev.map((patient) =>
-                            patient.id === selectedPatient?.id
-                              ? { ...patient, birth_date: event.target.value }
-                              : patient,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">Criado: {selectedPatient?.created_at?.slice(0, 10) || "-"}</Badge>
-                  <Badge variant="outline">Atualizado: {selectedPatient?.updated_at?.slice(0, 10) || "-"}</Badge>
-                </div>
-
-                <Button
-                  className="w-full md:w-auto"
-                  onClick={() => handlePatientUpdate(selectedPatient || {})}
-                  disabled={savingPatient || !selectedPatient}
-                >
-                  {savingPatient ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <FileText className="h-5 w-5 text-blue-600" /> Relatórios do paciente
-                </CardTitle>
-                <CardDescription>Visualize e ajuste o texto limpo enviado ao paciente</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {selectedPatient?.documents?.map((doc) => (
-                    <Badge
-                      key={doc.id}
-                      variant={doc.id === selectedDocument?.id ? "default" : "secondary"}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedDocumentId(doc.id)}
-                    >
-                      {doc.file_name}
-                    </Badge>
-                  ))}
-                </div>
-
-                {selectedDocument ? (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label>Título do arquivo</Label>
-                      <Input
-                        value={selectedDocument.file_name}
-                        onChange={(event) =>
-                          setPatients((prev) =>
-                            prev.map((patient) =>
-                              patient.id === selectedPatient?.id
-                                ? {
-                                    ...patient,
-                                    documents: patient.documents?.map((doc) =>
-                                      doc.id === selectedDocument.id
-                                        ? { ...doc, file_name: event.target.value }
-                                        : doc,
-                                    ),
-                                  }
-                                : patient,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Texto limpo</Label>
-                      <Textarea
-                        className="h-64"
-                        value={selectedDocument.clean_text || ""}
-                        onChange={(event) =>
-                          setPatients((prev) =>
-                            prev.map((patient) =>
-                              patient.id === selectedPatient?.id
-                                ? {
-                                    ...patient,
-                                    documents: patient.documents?.map((doc) =>
-                                      doc.id === selectedDocument.id
-                                        ? { ...doc, clean_text: event.target.value }
-                                        : doc,
-                                    ),
-                                  }
-                                : patient,
-                            ),
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">Criado em {selectedDocument.created_at.slice(0, 10)}</Badge>
-                      <Badge variant="outline">PDF {selectedDocument.pdf_url ? "gerado" : "pendente"}</Badge>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <Button
-                        onClick={() => handleDocumentUpdate(selectedDocument)}
-                        disabled={savingDocument}
-                        className="w-full md:w-auto"
-                      >
-                        {savingDocument ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar texto
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          if (selectedDocument.clean_text) {
-                            navigator.clipboard.writeText(selectedDocument.clean_text)
-                            setSuccessMessage("Relatório copiado para a área de transferência")
-                          }
-                        }}
-                        className="w-full md:w-auto"
-                      >
-                        <Clipboard className="mr-2 h-4 w-4" /> Copiar texto
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2 pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Label>Relatório HTML estilizado</Label>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => fetchDocumentHtml(true)}
-                          disabled={htmlLoading}
-                        >
-                          {htmlLoading ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="mr-2 h-4 w-4" /> Regenerar HTML
-                            </>
-                          )}
-                        </Button>
-                      </div>
-
-                      {htmlError && (
-                        <Alert variant="destructive">
-                          <AlertDescription>{htmlError}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      {!htmlError && htmlLoading && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Gerando relatório estilizado...
-                        </div>
-                      )}
-
-                      {!htmlLoading && !htmlError && !htmlPreview && (
-                        <p className="text-sm text-muted-foreground">
-                          Relatório HTML ainda não foi gerado.
-                        </p>
-                      )}
-
-                      {!htmlLoading && htmlPreview && (
-                        <div className="border rounded-lg overflow-hidden">
-                          <iframe
-                            title="Relatório médico HTML"
-                            className="w-full min-h-[640px]"
-                            sandbox=""
-                            referrerPolicy="no-referrer"
-                            srcDoc={sanitizedHtml}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Selecione um relatório para visualizar</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm" id={uploadSectionId}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Upload className="h-5 w-5 text-blue-600" /> Novo paciente por relatório .txt
-                </CardTitle>
-                <CardDescription>
-                  Faça upload do TXT para extrair nome e data de nascimento e gerar o login (senha = data de
-                  nascimento)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-[1fr,180px]">
-                  <div className="space-y-2">
-                    <Label htmlFor="txt">Cole ou revise o relatório</Label>
-                    <Textarea
-                      id="txt"
-                      className="h-48"
-                      value={uploadText}
-                      onChange={(event) => setUploadText(event.target.value)}
-                      placeholder="Cole aqui o conteúdo do relatório..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="file">Ou envie um arquivo .txt</Label>
-                    <Input
-                      id="file"
-                      type="file"
-                      accept=".txt"
-                      onChange={handleFileUpload}
-                      ref={uploadFileInputRef}
-                    />
-                    {uploadFileName && (
-                      <p className="text-xs text-muted-foreground">Arquivo selecionado: {uploadFileName}</p>
-                    )}
-                  </div>
-                </div>
-
-                <Button onClick={handleProcessUpload} disabled={uploading} className="w-full md:w-auto">
-                  {uploading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="mr-2 h-4 w-4" /> Processar e criar login
-                    </>
-                  )}
-                </Button>
-
-                {uploadResult?.cleanText && (
-                  <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" /> Limpeza e cadastro concluídos
-                    </div>
-                    {uploadResult.credentials && (
-                      <div className="rounded-md bg-white p-3 text-sm shadow-sm">
-                        <p className="font-semibold">Credenciais do paciente</p>
-                        <p>Login: {uploadResult.credentials.loginName}</p>
-                        <p>Senha: {uploadResult.credentials.password}</p>
-                        {uploadResult.credentials.existing && (
-                          <p className="text-xs text-muted-foreground">
-                            Paciente já existia, credenciais confirmadas
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {uploadResult.message && (
-                      <p className="text-sm text-muted-foreground">{uploadResult.message}</p>
-                    )}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <ListChecks className="h-4 w-4 text-blue-600" /> Texto limpo
-                      </div>
-                      <Textarea value={uploadResult.cleanText} className="h-40" readOnly />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <div />
         </div>
 
         {previewPatient && (
@@ -1208,6 +788,16 @@ export default function AdminHomePage() {
                   </h2>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRegeneratePreviewHtml}
+                    disabled={previewLoading}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Gerar relatório novamente
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
