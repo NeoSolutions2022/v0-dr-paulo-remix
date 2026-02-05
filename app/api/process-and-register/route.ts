@@ -3,70 +3,17 @@ import crypto from "crypto"
 import { cleanMedicalText } from "@/lib/clean/medical-text"
 import { extractPatientData } from "@/lib/parsers/patient"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-
-const DEFAULT_SUPABASE_URL = "https://fhznxprnzdswjzpesgal.supabase.co"
-const DEFAULT_SUPABASE_KEY = "sb_secret_42Y_GaLCMAj6glqzVN8rOQ_RfHvzNg5"
-const DEFAULT_SUPABASE_SERVICE_KEY = DEFAULT_SUPABASE_KEY
+import {
+  DEFAULT_SUPABASE,
+  createDataSupabaseClient,
+  getOrCreateAuthUser,
+  slugifyName,
+} from "@/lib/process-and-register"
 
 interface ProcessPayload {
   rawText: string
   sourceName?: string
   debugLogin?: boolean
-}
-
-function slugifyName(name: string) {
-  const slug = name
-    .normalize("NFD")
-    .replace(/[^a-zA-Z\s]/g, "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ".")
-    .replace(/\.+/g, ".")
-    .replace(/^\.|\.$/g, "")
-
-  // Supabase Auth local-part length limit safeguard (<=64 chars)
-  return slug.slice(0, 60)
-}
-
-async function getOrCreateAuthUser(
-  supabase: ReturnType<typeof createAdminClient>,
-  email: string,
-  password: string,
-) {
-  // Supabase-js v2 não expõe getUserByEmail; listamos e filtramos manualmente.
-  const { data: usersData, error: listError } = await supabase.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  })
-
-  if (listError) {
-    throw listError
-  }
-
-  const existingUser = usersData?.users?.find((user) => user.email?.toLowerCase() === email.toLowerCase())
-  if (existingUser) {
-    const { data: updatedUser, error: updateError } = await supabase.auth.admin.updateUserById(existingUser.id, {
-      password,
-      email_confirm: true,
-    })
-
-    if (updateError) {
-      throw updateError
-    }
-
-    return updatedUser?.user || existingUser
-  }
-
-  const { data: created, error: createError } = await supabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  })
-
-  if (!createError && created?.user) return created.user
-
-  throw createError || new Error("Falha ao criar usuário")
 }
 
 export async function POST(request: Request) {
@@ -96,12 +43,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const supabaseUrl = DEFAULT_SUPABASE_URL
-    const supabaseServiceKey = DEFAULT_SUPABASE_SERVICE_KEY
-
-    const dataSupabase = createSupabaseClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
+    const supabaseUrl = DEFAULT_SUPABASE.url
+    const dataSupabase = createDataSupabaseClient()
 
     let supabase
     try {
