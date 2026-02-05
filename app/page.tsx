@@ -609,38 +609,69 @@ export default function AdminHomePage() {
 
     try {
       const results: BatchItemResult[] = []
+      const chunkSize = 100
+      const maxRetries = 2
+      const retryDelayMs = 3000
       const total = batchFiles.length
       setBatchProgress({ processed: 0, total })
 
-      for (let i = 0; i < batchFiles.length; i += 10) {
-        const chunk = batchFiles.slice(i, i + 10)
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+      for (let i = 0; i < batchFiles.length; i += chunkSize) {
+        const chunk = batchFiles.slice(i, i + chunkSize)
         const chunkPayload = await Promise.all(
           chunk.map(async (file) => ({
             rawText: await file.text(),
             sourceName: file.name,
           })),
         )
-        const response = await fetch("/api/process-and-register/batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items: chunkPayload,
-            debugLogin: false,
-          }),
-        })
+        let processedChunk = false
+        let lastErrorMessage = "Falha ao processar lote de relatórios"
 
-        const data = await response.json()
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+          try {
+            const response = await fetch("/api/process-and-register/batch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                items: chunkPayload,
+                debugLogin: false,
+              }),
+            })
 
-        if (!response.ok) {
-          throw new Error(data.error || "Falha ao processar lote de relatórios")
+            const data = await response.json()
+
+            if (!response.ok) {
+              throw new Error(data.error || lastErrorMessage)
+            }
+
+            results.push(
+              ...(data.results as BatchItemResult[]).map((result) => ({
+                ...result,
+                index: result.index + i,
+              })),
+            )
+            processedChunk = true
+            break
+          } catch (err: any) {
+            lastErrorMessage = err?.message || lastErrorMessage
+            if (attempt < maxRetries) {
+              await wait(retryDelayMs)
+            }
+          }
         }
 
-        results.push(
-          ...(data.results as BatchItemResult[]).map((result) => ({
-            ...result,
-            index: result.index + i,
-          })),
-        )
+        if (!processedChunk) {
+          results.push(
+            ...chunk.map((file, index) => ({
+              index: i + index,
+              sourceName: file.name,
+              status: "error" as const,
+              message: lastErrorMessage,
+            })),
+          )
+        }
+
         setBatchProgress((prev) => ({ processed: Math.min(prev.total, i + chunk.length), total: prev.total }))
       }
 
@@ -1115,8 +1146,8 @@ export default function AdminHomePage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Envio em lote</p>
                     <p className="text-xs text-muted-foreground">
-                      Selecione quantos arquivos quiser; o envio é feito em blocos de 10 por requisição.
-                      Duplicados são identificados pelo hash do texto.
+                      Selecione quantos arquivos quiser; o envio é feito em blocos de 100 por requisição, com
+                      novas tentativas automáticas em caso de falha. Duplicados são identificados pelo hash do texto.
                     </p>
                   </div>
                   <div className="space-y-2">
