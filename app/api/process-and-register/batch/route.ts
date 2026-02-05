@@ -103,6 +103,7 @@ export async function POST(request: Request) {
       .map((item) => item.hashSha256 as string)
 
     const existingHashes = new Map<string, { id: string; patient_id: string; file_name: string | null }>()
+    const seenHashes = new Set<string>()
     if (hashes.length > 0) {
       const { data: existingDocs, error: existingDocsError } = await dataSupabase
         .from("documents")
@@ -140,7 +141,20 @@ export async function POST(request: Request) {
         continue
       }
 
-      const duplicate = existingHashes.get(item.hashSha256 as string)
+      const hash = item.hashSha256 as string
+      if (seenHashes.has(hash)) {
+        results.push({
+          index: item.index,
+          sourceName: item.sourceName,
+          status: "duplicate",
+          message: "Relatório duplicado no próprio lote (hash_sha256)",
+          hashSha256: hash,
+        })
+        continue
+      }
+      seenHashes.add(hash)
+
+      const duplicate = existingHashes.get(hash)
       if (duplicate) {
         results.push({
           index: item.index,
@@ -149,7 +163,7 @@ export async function POST(request: Request) {
           message: "Relatório já existe no banco (hash_sha256)",
           patientId: duplicate.patient_id,
           documentId: duplicate.id,
-          hashSha256: item.hashSha256,
+          hashSha256: hash,
         })
         continue
       }

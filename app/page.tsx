@@ -98,8 +98,9 @@ export default function AdminHomePage() {
   const [uploadText, setUploadText] = useState("")
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
   const [batchUploading, setBatchUploading] = useState(false)
-  const [batchFiles, setBatchFiles] = useState<Array<{ name: string; text: string }>>([])
+  const [batchFiles, setBatchFiles] = useState<File[]>([])
   const [batchResult, setBatchResult] = useState<BatchUploadResult | null>(null)
+  const [batchProgress, setBatchProgress] = useState({ processed: 0, total: 0 })
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -554,15 +555,9 @@ export default function AdminHomePage() {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
 
-    const fileContents = await Promise.all(
-      files.map(async (file) => ({
-        name: file.name,
-        text: await file.text(),
-      })),
-    )
-
-    setBatchFiles(fileContents)
+    setBatchFiles(files)
     setBatchResult(null)
+    setBatchProgress({ processed: 0, total: files.length })
     setUploadText("")
     setUploadFileName("")
     setUploadResult(null)
@@ -614,17 +609,22 @@ export default function AdminHomePage() {
 
     try {
       const results: BatchItemResult[] = []
+      const total = batchFiles.length
+      setBatchProgress({ processed: 0, total })
 
       for (let i = 0; i < batchFiles.length; i += 10) {
         const chunk = batchFiles.slice(i, i + 10)
+        const chunkPayload = await Promise.all(
+          chunk.map(async (file) => ({
+            rawText: await file.text(),
+            sourceName: file.name,
+          })),
+        )
         const response = await fetch("/api/process-and-register/batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            items: chunk.map((file) => ({
-              rawText: file.text,
-              sourceName: file.name,
-            })),
+            items: chunkPayload,
             debugLogin: false,
           }),
         })
@@ -635,7 +635,13 @@ export default function AdminHomePage() {
           throw new Error(data.error || "Falha ao processar lote de relatórios")
         }
 
-        results.push(...(data.results as BatchItemResult[]))
+        results.push(
+          ...(data.results as BatchItemResult[]).map((result) => ({
+            ...result,
+            index: result.index + i,
+          })),
+        )
+        setBatchProgress((prev) => ({ processed: Math.min(prev.total, i + chunk.length), total: prev.total }))
       }
 
       const created = results.filter((item) => item.status === "created").length
@@ -660,6 +666,7 @@ export default function AdminHomePage() {
       setError(err.message || "Erro ao processar lote")
     } finally {
       setBatchUploading(false)
+      setBatchProgress((prev) => ({ processed: prev.total, total: prev.total }))
     }
   }
 
@@ -1108,7 +1115,8 @@ export default function AdminHomePage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Envio em lote</p>
                     <p className="text-xs text-muted-foreground">
-                      Selecione até 10 arquivos por requisição. Duplicados são identificados pelo hash do texto.
+                      Selecione quantos arquivos quiser; o envio é feito em blocos de 10 por requisição.
+                      Duplicados são identificados pelo hash do texto.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1123,6 +1131,11 @@ export default function AdminHomePage() {
                     {batchFiles.length > 0 && (
                       <div className="space-y-1 text-xs text-muted-foreground">
                         <p>{batchFiles.length} arquivo(s) selecionado(s)</p>
+                        {batchProgress.total > 0 && (
+                          <p>
+                            Progresso: {batchProgress.processed}/{batchProgress.total}
+                          </p>
+                        )}
                         <ul className="max-h-24 overflow-y-auto">
                           {batchFiles.map((file) => (
                             <li key={file.name} className="flex items-center gap-2">
