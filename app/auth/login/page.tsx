@@ -122,25 +122,6 @@ export default function Page() {
                     {isLoading ? "Entrando..." : "Entrar"}
                   </Button>
                   
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Ou
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => router.push('/auth/sign-up')}
-                  >
-                    Criar Nova Conta
-                  </Button>
                 </div>
                 <div className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
                   Seu acesso foi criado pela clínica
