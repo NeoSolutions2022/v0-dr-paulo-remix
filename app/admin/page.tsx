@@ -13,7 +13,6 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   AlertCircle,
   CheckCircle2,
-  FileText,
   Loader2,
   LogOut,
   PenSquare,
@@ -57,7 +56,6 @@ export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [pageSize, setPageSize] = useState(200)
   const [loadingPatients, setLoadingPatients] = useState(true)
@@ -66,9 +64,6 @@ export default function AdminHomePage() {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const [htmlPreview, setHtmlPreview] = useState<string | null>(null)
-  const [htmlLoading, setHtmlLoading] = useState(false)
-  const [htmlError, setHtmlError] = useState("")
   const [previewPatientId, setPreviewPatientId] = useState<string | null>(null)
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -86,12 +81,6 @@ export default function AdminHomePage() {
     [patients, selectedPatientId],
   )
 
-  const selectedDocument = useMemo(
-    () => selectedPatient?.documents?.find((doc) => doc.id === selectedDocumentId) ?? selectedPatient?.documents?.[0],
-    [selectedDocumentId, selectedPatient],
-  )
-
-  const sanitizedHtml = useMemo(() => (htmlPreview ? sanitizeHtml(htmlPreview) : ""), [htmlPreview])
   const previewPatient = useMemo(
     () => patients.find((patient) => patient.id === previewPatientId) ?? null,
     [patients, previewPatientId],
@@ -211,9 +200,8 @@ export default function AdminHomePage() {
 
       let query = adminClient
         .from("patients")
-        .select("id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id)")
+        .select("id, full_name, email, birth_date, cpf, created_at, updated_at")
         .order("created_at", { ascending: false })
-        .order("created_at", { foreignTable: "documents", ascending: false })
 
       if (Number.isFinite(nextLimit)) {
         query = query.limit(nextLimit)
@@ -231,7 +219,6 @@ export default function AdminHomePage() {
 
       setPatients(data || [])
       setSelectedPatientId(data?.[0]?.id ?? null)
-      setSelectedDocumentId(data?.[0]?.documents?.[0]?.id ?? null)
     } catch (err: any) {
       setError(err.message || "Erro ao buscar pacientes")
     } finally {
@@ -271,53 +258,6 @@ export default function AdminHomePage() {
       setError(err.message || "Erro ao salvar paciente")
     } finally {
       setSavingPatient(false)
-    }
-  }
-
-  const fetchDocumentHtml = async (force = false) => {
-    if (!selectedDocument) return
-    setHtmlLoading(true)
-    setHtmlError("")
-
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
-      if (!apiKey) {
-        throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
-      }
-      const cleanText = selectedDocument.clean_text || ""
-      if (!cleanText.trim()) {
-        throw new Error("Relatório sem texto para processamento")
-      }
-
-      const geminiResponse = await callGemini(cleanText, apiKey)
-      const nextHtml = sanitizeHtml(geminiResponse.rawText)
-
-      const { error: updateError } = await adminClient
-        .from("documents")
-        .update({ html: nextHtml })
-        .eq("id", selectedDocument.id)
-
-      if (updateError) {
-        throw updateError
-      }
-
-      setHtmlPreview(nextHtml || null)
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === selectedPatient?.id
-            ? {
-                ...patient,
-                documents: patient.documents?.map((doc) =>
-                  doc.id === selectedDocument.id ? { ...doc, html: nextHtml } : doc,
-                ),
-              }
-            : patient,
-        ),
-      )
-    } catch (err: any) {
-      setHtmlError(err.message || "Erro ao carregar HTML")
-    } finally {
-      setHtmlLoading(false)
     }
   }
 
@@ -481,20 +421,6 @@ export default function AdminHomePage() {
       printWindow.print()
     }, 250)
   }
-
-  useEffect(() => {
-    if (!selectedDocument) {
-      setHtmlPreview(null)
-      return
-    }
-
-    const cachedHtml = selectedDocument.html?.trim() ? selectedDocument.html : null
-    setHtmlPreview(cachedHtml)
-
-    if (!cachedHtml) {
-      fetchDocumentHtml(false)
-    }
-  }, [selectedDocument])
 
   useEffect(() => {
     if (!previewHtml) {
@@ -754,9 +680,6 @@ export default function AdminHomePage() {
                         >
                           <p className="font-semibold text-slate-900">{patient.full_name}</p>
                           <p className="text-xs text-muted-foreground">{patient.email || "Sem email"}</p>
-                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <FileText className="h-4 w-4" /> {patient.documents?.length || 0} relatórios
-                          </div>
                         </button>
                         <Button
                           type="button"
