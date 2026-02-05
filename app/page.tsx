@@ -63,6 +63,26 @@ interface UploadResult {
   document?: PatientDocument
 }
 
+interface BatchItemResult {
+  index: number
+  sourceName?: string
+  status: "created" | "duplicate" | "error"
+  message?: string
+  patientId?: string
+  documentId?: string
+  hashSha256?: string
+}
+
+interface BatchUploadResult {
+  results: BatchItemResult[]
+  summary: {
+    total: number
+    created: number
+    duplicates: number
+    failed: number
+  }
+}
+
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -77,6 +97,9 @@ export default function AdminHomePage() {
   const [uploadFileName, setUploadFileName] = useState("")
   const [uploadText, setUploadText] = useState("")
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
+  const [batchUploading, setBatchUploading] = useState(false)
+  const [batchFiles, setBatchFiles] = useState<Array<{ name: string; text: string }>>([])
+  const [batchResult, setBatchResult] = useState<BatchUploadResult | null>(null)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -523,6 +546,26 @@ export default function AdminHomePage() {
     setUploadFileName(file.name)
     setUploadText(text)
     setUploadResult(null)
+    setBatchFiles([])
+    setBatchResult(null)
+  }
+
+  const handleBatchFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
+
+    const fileContents = await Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        text: await file.text(),
+      })),
+    )
+
+    setBatchFiles(fileContents)
+    setBatchResult(null)
+    setUploadText("")
+    setUploadFileName("")
+    setUploadResult(null)
   }
 
   const handleProcessUpload = async () => {
@@ -549,12 +592,74 @@ export default function AdminHomePage() {
       }
 
       setUploadResult(data)
+      setBatchResult(null)
       setSuccessMessage("Relatório processado e login criado com sucesso")
       await loadPatients()
     } catch (err: any) {
       setError(err.message || "Erro ao processar arquivo")
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleProcessBatchUpload = async () => {
+    if (batchFiles.length === 0) {
+      setError("Selecione arquivos .txt para enviar em lote")
+      return
+    }
+
+    setBatchUploading(true)
+    setError("")
+    setSuccessMessage("")
+
+    try {
+      const results: BatchItemResult[] = []
+
+      for (let i = 0; i < batchFiles.length; i += 10) {
+        const chunk = batchFiles.slice(i, i + 10)
+        const response = await fetch("/api/process-and-register/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: chunk.map((file) => ({
+              rawText: file.text,
+              sourceName: file.name,
+            })),
+            debugLogin: false,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || "Falha ao processar lote de relatórios")
+        }
+
+        results.push(...(data.results as BatchItemResult[]))
+      }
+
+      const created = results.filter((item) => item.status === "created").length
+      const duplicates = results.filter((item) => item.status === "duplicate").length
+      const failed = results.filter((item) => item.status === "error").length
+
+      setBatchResult({
+        results,
+        summary: {
+          total: results.length,
+          created,
+          duplicates,
+          failed,
+        },
+      })
+      setUploadResult(null)
+      setSuccessMessage(
+        `Envio em lote concluído: ${created} novos, ${duplicates} duplicados, ${failed} com erro.`,
+      )
+      await loadPatients()
+    } catch (err: any) {
+      setError(err.message || "Erro ao processar lote")
+    } finally {
+      setBatchUploading(false)
     }
   }
 
@@ -998,6 +1103,81 @@ export default function AdminHomePage() {
                     </>
                   )}
                 </Button>
+
+                <div className="rounded-lg border border-dashed p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Envio em lote</p>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione até 10 arquivos por requisição. Duplicados são identificados pelo hash do texto.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="batch-files">Arquivos .txt</Label>
+                    <Input
+                      id="batch-files"
+                      type="file"
+                      accept=".txt"
+                      multiple
+                      onChange={handleBatchFileUpload}
+                    />
+                    {batchFiles.length > 0 && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <p>{batchFiles.length} arquivo(s) selecionado(s)</p>
+                        <ul className="max-h-24 overflow-y-auto">
+                          {batchFiles.map((file) => (
+                            <li key={file.name} className="flex items-center gap-2">
+                              <FileText className="h-3 w-3" /> {file.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <Button onClick={handleProcessBatchUpload} disabled={batchUploading} className="w-full md:w-auto">
+                    {batchUploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando lote
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" /> Enviar lote
+                      </>
+                    )}
+                  </Button>
+
+                  {batchResult && (
+                    <div className="rounded-md bg-white p-3 text-xs shadow-sm space-y-2">
+                      <div className="flex items-center gap-2 font-semibold text-slate-900">
+                        <ListChecks className="h-4 w-4 text-blue-600" /> Resumo do lote
+                      </div>
+                      <p>
+                        Total: {batchResult.summary.total} · Novos: {batchResult.summary.created} · Duplicados:{" "}
+                        {batchResult.summary.duplicates} · Erros: {batchResult.summary.failed}
+                      </p>
+                      <ul className="space-y-1 max-h-32 overflow-y-auto">
+                        {batchResult.results.map((result, index) => (
+                          <li key={`${result.index}-${index}`} className="flex items-start gap-2">
+                            <span className="mt-0.5">
+                              {result.status === "created" && (
+                                <CheckCircle2 className="h-3 w-3 text-green-600" />
+                              )}
+                              {result.status === "duplicate" && (
+                                <Clipboard className="h-3 w-3 text-amber-600" />
+                              )}
+                              {result.status === "error" && <X className="h-3 w-3 text-red-600" />}
+                            </span>
+                            <span>
+                              {batchFiles[result.index]?.name ?? result.sourceName ?? `Item ${result.index + 1}`}:{" "}
+                              {result.status === "created" && "Enviado"}
+                              {result.status === "duplicate" && "Já existia"}
+                              {result.status === "error" && (result.message || "Erro ao enviar")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
 
                 {uploadResult?.cleanText && (
                   <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
