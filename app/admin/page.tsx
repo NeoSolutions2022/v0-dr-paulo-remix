@@ -35,9 +35,9 @@ import { callGemini } from "@/lib/gemini/medical-report"
 interface PatientDocument {
   id: string
   patient_id: string
-  file_name: string
-  created_at: string
-  clean_text: string | null
+  file_name?: string
+  created_at?: string
+  clean_text?: string | null
   pdf_url?: string | null
   html?: string | null
 }
@@ -211,9 +211,7 @@ export default function AdminHomePage() {
 
       let query = adminClient
         .from("patients")
-        .select(
-          "id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id, file_name, created_at, clean_text, pdf_url, html)",
-        )
+        .select("id, full_name, email, birth_date, cpf, created_at, updated_at, documents (id, patient_id)")
         .order("created_at", { ascending: false })
         .order("created_at", { foreignTable: "documents", ascending: false })
 
@@ -325,28 +323,33 @@ export default function AdminHomePage() {
 
   const loadPreviewHtml = async (patientId: string) => {
     setPreviewLoading(true)
-    const patient = patients.find((entry) => entry.id === patientId)
-    const document =
-      patient?.documents?.find(
-        (doc) => doc.patient_id === patientId && isValidUuid(doc.id),
-      ) ?? null
-
-    setPreviewHtml(document?.html?.trim() ? document.html : null)
-    setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
-    setPreviewError("")
-
-    if (!document || !isValidUuid(document.id)) {
-      setPreviewError("Nenhum relatório disponível para este paciente.")
-      setPreviewLoading(false)
-      return
-    }
-
-    if (document.html?.trim()) {
-      setPreviewLoading(false)
-      return
-    }
 
     try {
+      const { data: document, error: documentError } = await adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      setPreviewHtml(document?.html?.trim() ? document.html : null)
+      setPreviewDocumentId(isValidUuid(document?.id) ? document?.id ?? null : null)
+      setPreviewError("")
+
+      if (!document || !isValidUuid(document.id)) {
+        setPreviewError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      if (document.html?.trim()) {
+        return
+      }
+
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) {
         throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
@@ -394,21 +397,29 @@ export default function AdminHomePage() {
     setError("")
     setSuccessMessage("")
 
-    const document =
-      previewPatient.documents?.find(
-        (doc) =>
-          doc.patient_id === previewPatient.id &&
-          (previewDocumentId ? doc.id === previewDocumentId : true) &&
-          isValidUuid(doc.id),
-      ) ?? null
-
-    if (!document?.id || !isValidUuid(document.id)) {
-      setPreviewError("Nenhum relatório disponível para este paciente.")
-      setPreviewLoading(false)
-      return
-    }
-
     try {
+      let documentQuery = adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("patient_id", previewPatient.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (previewDocumentId && isValidUuid(previewDocumentId)) {
+        documentQuery = documentQuery.eq("id", previewDocumentId)
+      }
+
+      const { data: document, error: documentError } = await documentQuery.maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      if (!document?.id || !isValidUuid(document.id)) {
+        setPreviewError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
       if (!apiKey) {
         throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
