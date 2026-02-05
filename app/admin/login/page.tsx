@@ -28,7 +28,7 @@ function AdminLoginPage() {
     const checkSession = async () => {
       const token = readAdminSession()
       if (hasValidAdminSession(token)) {
-        router.push(searchParams.get('redirectTo') || '/')
+        router.push(searchParams.get('redirectTo') || '/admin')
       }
     }
 
@@ -46,7 +46,7 @@ function AdminLoginPage() {
       }
 
       persistAdminSession()
-      router.push(searchParams.get('redirectTo') || '/')
+    router.push(searchParams.get('redirectTo') || '/admin')
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login')
     } finally {
