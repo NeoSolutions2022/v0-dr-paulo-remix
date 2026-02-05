@@ -35,7 +35,7 @@ interface BatchItemResult {
   }
 }
 
-const MAX_BATCH_SIZE = 10
+const MAX_BATCH_SIZE = 100
 
 export async function POST(request: Request) {
   try {
