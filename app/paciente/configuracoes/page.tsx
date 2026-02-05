@@ -1,27 +1,58 @@
-import { redirect } from 'next/navigation'
-import { createClient } from "@/lib/supabase/server"
+"use client"
+
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createBrowserClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { User, Mail, Phone, Calendar, Shield, Key } from 'lucide-react'
+import { User, Mail, Calendar, Shield, Key } from 'lucide-react'
 
-export default async function ConfiguracoesPage() {
-  const supabase = await createClient()
+interface PatientProfile {
+  id: string
+  full_name: string | null
+  cpf: string | null
+  birth_date: string | null
+  created_at?: string | null
+}
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+export default function ConfiguracoesPage() {
+  const router = useRouter()
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [emailConfirmedAt, setEmailConfirmedAt] = useState<string | null>(null)
+  const [userCreatedAt, setUserCreatedAt] = useState<string | null>(null)
+  const [patient, setPatient] = useState<PatientProfile | null>(null)
 
-  if (!user) {
-    redirect("/auth/login")
-  }
+  useEffect(() => {
+    const loadProfile = async () => {
+      const supabase = createBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-  const { data: patient } = await supabase
-    .from("patients")
-    .select("*")
-    .eq("id", user.id)
-    .single()
+      if (!user) {
+        router.replace("/auth/login")
+        return
+      }
+
+      setUserEmail(user.email ?? null)
+      setUserId(user.id)
+      setEmailConfirmedAt(user.email_confirmed_at ?? null)
+      setUserCreatedAt(user.created_at ?? null)
+
+      const { data: patientData } = await supabase
+        .from("patients")
+        .select("id, full_name, cpf, birth_date, created_at")
+        .eq("id", user.id)
+        .single()
+
+      setPatient(patientData || null)
+    }
+
+    loadProfile()
+  }, [router])
 
   return (
     <div className="space-y-6">
@@ -53,7 +84,7 @@ export default async function ConfiguracoesPage() {
                 </Label>
                 <Input
                   id="name"
-                  defaultValue={patient?.name}
+                  defaultValue={patient?.full_name ?? ""}
                   readOnly
                   className="bg-slate-50 dark:bg-slate-900"
                 />
@@ -67,20 +98,7 @@ export default async function ConfiguracoesPage() {
                 <Input
                   id="email"
                   type="email"
-                  defaultValue={user.email}
-                  readOnly
-                  className="bg-slate-50 dark:bg-slate-900"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="phone" className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Telefone
-                </Label>
-                <Input
-                  id="phone"
-                  defaultValue={patient?.phone || "Não informado"}
+                  defaultValue={userEmail ?? ""}
                   readOnly
                   className="bg-slate-50 dark:bg-slate-900"
                 />
@@ -158,13 +176,13 @@ export default async function ConfiguracoesPage() {
                       Email Verificado
                     </p>
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                      {user.email_confirmed_at
+                  {emailConfirmedAt
                         ? "Seu email está verificado"
                         : "Aguardando verificação"}
                     </p>
                   </div>
                 </div>
-                {user.email_confirmed_at && (
+                {emailConfirmedAt && (
                   <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
                     <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
                   </div>
@@ -184,14 +202,14 @@ export default async function ConfiguracoesPage() {
             <CardContent>
               <div className="flex flex-col items-center gap-4">
                 <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-                  {patient?.name?.charAt(0).toUpperCase() || "P"}
+                  {patient?.full_name?.charAt(0).toUpperCase() || "P"}
                 </div>
                 <div className="text-center">
                   <p className="font-semibold text-slate-900 dark:text-slate-100">
-                    {patient?.name}
+                    {patient?.full_name}
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {user.email}
+                    {userEmail}
                   </p>
                 </div>
               </div>
@@ -211,7 +229,7 @@ export default async function ConfiguracoesPage() {
                     Membro desde
                   </p>
                   <p className="text-sm text-slate-600 dark:text-slate-400">
-                    {new Date(patient?.created_at || user.created_at).toLocaleDateString("pt-BR", {
+                    {new Date(patient?.created_at || userCreatedAt || Date.now()).toLocaleDateString("pt-BR", {
                       day: "2-digit",
                       month: "long",
                       year: "numeric",
@@ -227,7 +245,7 @@ export default async function ConfiguracoesPage() {
                     ID do Paciente
                   </p>
                   <p className="text-xs font-mono text-slate-600 dark:text-slate-400 break-all">
-                    {user.id.substring(0, 16)}...
+                    {userId ? `${userId.substring(0, 16)}...` : ""}
                   </p>
                 </div>
               </div>

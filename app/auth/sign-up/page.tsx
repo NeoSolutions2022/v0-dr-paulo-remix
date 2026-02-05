@@ -20,7 +20,6 @@ export default function Page() {
   const [cpf, setCpf] = useState("");
   const [fullName, setFullName] = useState("");
   const [birthDate, setBirthDate] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -82,7 +81,6 @@ export default function Page() {
           cpf: cpfOnly,
           full_name: fullName,
           birth_date: birthDate,
-          phone: phone,
           email: email,
           first_access: false,
         });
@@ -157,18 +155,6 @@ export default function Page() {
                       required
                       value={birthDate}
                       onChange={(e) => setBirthDate(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="phone">Telefone</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="(11) 98765-4321"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
                     />
                   </div>
 

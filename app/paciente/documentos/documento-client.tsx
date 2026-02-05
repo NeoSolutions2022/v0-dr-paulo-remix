@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Calendar, Shield, AlertCircle, Loader2 } from "lucide-react"
+import { Calendar, AlertCircle, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { HtmlDocumentViewer } from "@/components/patient/html-document-viewer"
-import { PatientCpfGate } from "@/components/patient-cpf-gate"
 import { createClient } from "@/lib/supabase/client"
 
 type PatientDocument = {
@@ -23,17 +22,10 @@ type PatientDocument = {
   html?: string | null
 }
 
-type PatientInfo = {
-  cpf: string | null
-  full_name: string | null
-}
-
-export default function DocumentoPage({ params }: { params: { id: string } }) {
-  const { id } = params
+export function DocumentoClient({ id }: { id: string }) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const [document, setDocument] = useState<PatientDocument | null>(null)
-  const [patient, setPatient] = useState<PatientInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,51 +47,20 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
           return
         }
 
-        const [patientResp, documentResp] = await Promise.all([
-          supabase
-            .from("patients")
-            .select("cpf, full_name")
-            .eq("id", user.id)
-            .maybeSingle(),
-          fetch(`/api/patient/documents?id=${encodeURIComponent(id)}`, {
-            credentials: "include",
-            cache: "no-store",
-          }),
-        ])
+        const { data: documentData, error: documentError } = await supabase
+          .from("documents")
+          .select("id, patient_id, file_name, created_at, pdf_url, clean_text, hash_sha256, html")
+          .eq("id", id)
+          .eq("patient_id", user.id)
+          .maybeSingle()
 
-        if (patientResp.error) {
-          console.error("Erro ao carregar paciente", patientResp.error)
+        if (documentError) {
+          throw documentError
         }
-
-        if (patientResp.data) {
-          setPatient(patientResp.data)
-        }
-
-        if (documentResp.status === 401) {
-          router.replace("/auth/login")
-          return
-        }
-
-        if (documentResp.status === 404) {
-          setError("Documento não encontrado ou não pertence a você")
-          setIsLoading(false)
-          return
-        }
-
-        if (!documentResp.ok) {
-          throw new Error("Não foi possível carregar o documento")
-        }
-
-        const { documents } = (await documentResp.json()) as {
-          documents: PatientDocument | PatientDocument[]
-        }
-
-        const documentData = Array.isArray(documents)
-          ? documents[0]
-          : documents
 
         if (!documentData) {
-          setError("Documento não encontrado")
+          setError("Documento não encontrado ou não pertence a você")
+          setIsLoading(false)
           return
         }
 
@@ -114,8 +75,6 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
 
     loadData()
   }, [id, router, supabase])
-
-  const hasCpf = !!patient?.cpf
 
   if (isLoading) {
     return (
@@ -161,42 +120,9 @@ export default function DocumentoPage({ params }: { params: { id: string } }) {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {!hasCpf && (
-            <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/40 rounded-lg border">
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                Para validar o relatório publicamente ou assinar com hash, informe seu CPF.
-              </p>
-              <PatientCpfGate patientId={document.patient_id} />
-            </div>
-          )}
-
           <HtmlDocumentViewer html={document.html} fileName={document.file_name} />
-
-          {document.hash_sha256 && (
-            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <p className="font-medium text-sm text-blue-900 dark:text-blue-100">
-                      Documento assinado digitalmente
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                      Valide a autenticidade pelo QR Code ou link público
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={`/validar/${document.id}`} target="_blank">
-                    Validar
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
-
     </div>
   )
 }

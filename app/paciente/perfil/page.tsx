@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User, Mail, Phone, Calendar, Shield, Save, Lock } from 'lucide-react';
+import { User, Mail, Calendar, Shield, Save, Lock } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
 export default function PerfilPage() {
@@ -28,8 +28,7 @@ export default function PerfilPage() {
   const [user, setUser] = useState<any>(null);
   
   const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
+    full_name: '',
     email: '',
     lgpd_consent: false,
     notification_email: true,
@@ -64,8 +63,7 @@ export default function PerfilPage() {
       if (patientData) {
         setPatient(patientData);
         setFormData({
-          name: patientData.name || '',
-          phone: patientData.phone || '',
+          full_name: patientData.full_name || '',
           email: patientData.email || authUser.email || '',
           lgpd_consent: patientData.lgpd_consent || false,
           notification_email: patientData.notification_preferences?.email ?? true,
@@ -82,8 +80,7 @@ export default function PerfilPage() {
       const { error } = await supabase
         .from("patients")
         .update({
-          name: formData.name,
-          phone: formData.phone,
+          full_name: formData.full_name,
           email: formData.email,
           lgpd_consent: formData.lgpd_consent,
           lgpd_consent_date: formData.lgpd_consent ? new Date().toISOString() : null,
@@ -187,8 +184,8 @@ export default function PerfilPage() {
                 <Label htmlFor="name">Nome Completo</Label>
                 <Input
                   id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                 />
               </div>
               
@@ -202,16 +199,6 @@ export default function PerfilPage() {
                 />
               </div>
               
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Telefone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="(00) 00000-0000"
-                />
-              </div>
-
               <div className="grid gap-2">
                 <Label htmlFor="cpf">CPF</Label>
                 <Input

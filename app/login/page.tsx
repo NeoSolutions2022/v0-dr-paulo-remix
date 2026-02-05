@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { createAdminBrowserClient } from '@/lib/supabase/client-admin'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,18 +53,34 @@ export default function UnifiedLoginPage() {
     fullName: string
     birthDate: string | null
   }) => {
-    const response = await fetch('/api/patients/ensure', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const adminClient = createAdminBrowserClient()
+    const { data: existingPatient } = await adminClient
+      .from('patients')
+      .select('id')
+      .eq('id', payload.userId)
+      .maybeSingle()
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Falha ao sincronizar cadastro do paciente: ${errorText}`)
+    if (existingPatient) {
+      return existingPatient
     }
 
-    return response.json()
+    const { data, error } = await adminClient
+      .from('patients')
+      .insert({
+        id: payload.userId,
+        full_name: payload.fullName || payload.email,
+        email: payload.email || null,
+        birth_date: payload.birthDate,
+        first_access: true,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      throw new Error(`Falha ao sincronizar cadastro do paciente: ${error.message}`)
+    }
+
+    return data
   }
 
   const handleLogin = async (e: React.FormEvent) => {

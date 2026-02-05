@@ -13,7 +13,6 @@ interface Patient {
   id: string
   full_name: string
   cpf: string
-  phone: string | null
   created_at: string
 }
 
@@ -41,7 +40,7 @@ export default function ClinicPatientsPage() {
 
         const { data, error } = await supabase
           .from('patients')
-          .select('id, full_name, cpf, phone, created_at')
+          .select('id, full_name, cpf, created_at')
           .eq('clinic_id', clinicUser.clinic_id)
           .order('created_at', { ascending: false })
 
@@ -100,16 +99,13 @@ export default function ClinicPatientsPage() {
               {filteredPatients.map((patient) => (
                 <Link
                   key={patient.id}
-                  href={`/clinica/pacientes/${patient.id}`}
+                  href={`/clinica/pacientes/detalhe?id=${patient.id}`}
                   className="block p-4 rounded-lg border hover:border-blue-500 hover:bg-blue-50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">{patient.full_name}</h3>
                       <p className="text-sm text-gray-600">CPF: {patient.cpf}</p>
-                      {patient.phone && (
-                        <p className="text-sm text-gray-600">Tel: {patient.phone}</p>
-                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">

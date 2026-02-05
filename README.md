@@ -34,3 +34,7 @@ Set the following environment variable when running the Docker image to enable t
 2. Deploy your chats from the v0 interface
 3. Changes are automatically pushed to this repository
 4. Vercel deploys the latest version from this repository
+
+## Static export notes
+
+- This project is configured for static export (frontend-only). API routes have been removed to keep the export build compatible with static hosting.

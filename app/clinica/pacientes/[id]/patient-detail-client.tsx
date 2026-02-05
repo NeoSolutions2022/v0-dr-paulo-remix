@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,6 @@ interface Patient {
   full_name: string
   cpf: string
   email: string | null
-  phone: string | null
   birth_date: string | null
   created_at: string
   observations: string | null
@@ -28,10 +27,10 @@ interface Document {
   views_count: number
 }
 
-export default function PatientDetailPage() {
-  const params = useParams()
+export function PatientDetailClient() {
   const router = useRouter()
-  const patientId = params.id as string
+  const searchParams = useSearchParams()
+  const patientId = searchParams.get('id') || ''
 
   const [patient, setPatient] = useState<Patient | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -40,6 +39,11 @@ export default function PatientDetailPage() {
   useEffect(() => {
     async function loadPatient() {
       try {
+        if (!patientId) {
+          setLoading(false)
+          return
+        }
+
         const supabase = createBrowserClient()
 
         // Carregar dados do paciente
@@ -122,12 +126,6 @@ export default function PatientDetailPage() {
               <div>
                 <p className="text-sm text-gray-500">E-mail</p>
                 <p className="font-medium">{patient.email}</p>
-              </div>
-            )}
-            {patient.phone && (
-              <div>
-                <p className="text-sm text-gray-500">Telefone</p>
-                <p className="font-medium">{patient.phone}</p>
               </div>
             )}
             {patient.birth_date && (
