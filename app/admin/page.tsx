@@ -387,6 +387,71 @@ export default function AdminHomePage() {
     }
   }
 
+  const handleRegeneratePreviewHtml = async () => {
+    if (!previewPatient) return
+    setPreviewLoading(true)
+    setPreviewError("")
+    setError("")
+    setSuccessMessage("")
+
+    const document =
+      previewPatient.documents?.find(
+        (doc) =>
+          doc.patient_id === previewPatient.id &&
+          (previewDocumentId ? doc.id === previewDocumentId : true) &&
+          isValidUuid(doc.id),
+      ) ?? null
+
+    if (!document?.id || !isValidUuid(document.id)) {
+      setPreviewError("Nenhum relatório disponível para este paciente.")
+      setPreviewLoading(false)
+      return
+    }
+
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY
+      if (!apiKey) {
+        throw new Error("Missing NEXT_PUBLIC_GEMINI_API_KEY")
+      }
+      const cleanText = document.clean_text || ""
+      if (!cleanText.trim()) {
+        throw new Error("Relatório sem texto para processamento")
+      }
+
+      const geminiResponse = await callGemini(cleanText, apiKey)
+      const nextHtml = sanitizeHtml(geminiResponse.rawText)
+
+      const { error: updateError } = await adminClient
+        .from("documents")
+        .update({ html: nextHtml })
+        .eq("id", document.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      setPreviewHtml(nextHtml || null)
+      setPreviewDocumentId(document.id)
+      setPatients((prev) =>
+        prev.map((patient) =>
+          patient.id === previewPatient.id
+            ? {
+                ...patient,
+                documents: patient.documents?.map((doc) =>
+                  doc.id === document.id ? { ...doc, html: nextHtml } : doc,
+                ),
+              }
+            : patient,
+        ),
+      )
+      setSuccessMessage("Relatório atualizado com sucesso")
+    } catch (err: any) {
+      setPreviewError(err.message || "Erro ao gerar relatório")
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
   const handleOpenPreview = async (patientId: string) => {
     setPreviewPatientId(patientId)
     setPreviewHtml(null)
@@ -712,6 +777,16 @@ export default function AdminHomePage() {
                   </h2>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleRegeneratePreviewHtml}
+                    disabled={previewLoading}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Gerar relatório novamente
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
