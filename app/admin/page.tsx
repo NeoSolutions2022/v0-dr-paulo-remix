@@ -60,7 +60,6 @@ export default function AdminHomePage() {
   const [pageSize, setPageSize] = useState(200)
   const [loadingPatients, setLoadingPatients] = useState(true)
   const [savingPatient, setSavingPatient] = useState(false)
-  const [savingDocument, setSavingDocument] = useState(false)
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -469,24 +468,35 @@ export default function AdminHomePage() {
 
   const handleSaveMedicalSummary = async () => {
     if (!previewPatient || !previewHtml) return
-    const document = previewDocumentId
-      ? previewPatient.documents?.find(
-          (doc) => doc.id === previewDocumentId && doc.patient_id === previewPatient.id,
-        )
-      : null
-    if (!document?.id || !isValidUuid(document.id)) {
-      setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
-      return
-    }
-
     setSavingMedicalSummary(true)
     setMedicalSummaryError("")
     setError("")
     setSuccessMessage("")
 
-    const updatedHtml = updateMedicalSummaryHtml(previewHtml, previewMedicalSummary)
-
     try {
+      if (!previewDocumentId || !isValidUuid(previewDocumentId)) {
+        setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      const { data: document, error: documentError } = await adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("id", previewDocumentId)
+        .eq("patient_id", previewPatient.id)
+        .maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      if (!document?.id || !isValidUuid(document.id)) {
+        setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      const updatedHtml = updateMedicalSummaryHtml(previewHtml, previewMedicalSummary)
+
       const { data, error } = await adminClient
         .from("documents")
         .update({
@@ -520,45 +530,6 @@ export default function AdminHomePage() {
       setMedicalSummaryError(err.message || "Erro ao atualizar resumo médico")
     } finally {
       setSavingMedicalSummary(false)
-    }
-  }
-
-  const handleDocumentUpdate = async (changes: Partial<PatientDocument>) => {
-    if (!selectedDocument || !isValidUuid(selectedDocument.id)) {
-      setError("Relatório inválido")
-      return
-    }
-    setSavingDocument(true)
-    setSuccessMessage("")
-    setError("")
-
-    try {
-      console.info("[admin] Salvando documento", { documentId: selectedDocument.id })
-      const { data, error } = await adminClient
-        .from("documents")
-        .update({
-          file_name: changes.file_name ?? selectedDocument.file_name,
-          clean_text: changes.clean_text ?? selectedDocument.clean_text,
-        })
-        .eq("id", selectedDocument.id)
-        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
-        .single()
-
-      if (error) {
-        throw error
-      }
-      setPatients((prev) =>
-        prev.map((patient) =>
-          patient.id === selectedPatient?.id
-            ? { ...patient, documents: patient.documents?.map((doc) => (doc.id === selectedDocument.id ? data : doc)) }
-            : patient,
-        ),
-      )
-      setSuccessMessage("Relatório atualizado com sucesso")
-    } catch (err: any) {
-      setError(err.message || "Erro ao salvar documento")
-    } finally {
-      setSavingDocument(false)
     }
   }
 
