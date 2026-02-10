@@ -83,7 +83,7 @@ export default function HomePage() {
                   variant="outline"
                   className="h-14 border-slate-300 text-base font-semibold text-slate-700 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-800"
                 >
-                  <Link href="/auth/login">Entrar como paciente</Link>
+                <Link href="/login">Entrar como paciente</Link>
                 </Button>
               </CardContent>
             </Card>

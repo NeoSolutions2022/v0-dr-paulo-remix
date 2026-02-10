@@ -26,7 +26,7 @@ export default function WelcomePage() {
       } = await supabase.auth.getUser()
 
       if (error || !user) {
-        router.replace("/auth/login")
+        router.replace("/login")
         return
       }
 

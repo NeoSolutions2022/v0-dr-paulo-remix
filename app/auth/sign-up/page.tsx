@@ -205,7 +205,7 @@ export default function Page() {
 
                   <div className="text-center text-sm">
                     Já tem uma conta?{" "}
-                    <Link href="/auth/login" className="text-blue-600 hover:underline dark:text-blue-400">
+                    <Link href="/login" className="text-blue-600 hover:underline dark:text-blue-400">
                       Faça login
                     </Link>
                   </div>

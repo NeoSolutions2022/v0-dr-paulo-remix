@@ -32,7 +32,7 @@ export default function Page() {
                 sua conta antes de fazer login.
               </p>
               <Button asChild className="w-full">
-                <Link href="/auth/login">Ir para Login</Link>
+                <Link href="/login">Ir para Login</Link>
               </Button>
             </CardContent>
           </Card>

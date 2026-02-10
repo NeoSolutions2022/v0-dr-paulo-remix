@@ -43,7 +43,7 @@ export function DocumentoClient({ id }: { id: string }) {
         } = await supabase.auth.getUser()
 
         if (!user) {
-          router.replace("/auth/login")
+          router.replace("/login")
           return
         }
 
