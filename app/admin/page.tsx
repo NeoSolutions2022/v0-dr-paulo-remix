@@ -55,7 +55,7 @@ interface Patient {
 interface EditableHtmlBlock {
   id: string
   title: string
-  html: string
+  text: string
 }
 
 export default function AdminHomePage() {
@@ -132,30 +132,44 @@ export default function AdminHomePage() {
     const parsed = new DOMParser().parseFromString(html, "text/html")
     const cards = Array.from(parsed.querySelectorAll(".card"))
 
-    return cards
-      .map((card, index) => {
-        const heading = card.querySelector("h2")?.textContent?.trim() || `Bloco ${index + 1}`
-        return {
-          id: `card-${index}`,
-          title: heading,
-          html: card.innerHTML,
-        }
-      })
-      .filter((block) => block.html.trim().length > 0)
+    return cards.flatMap((card, cardIndex) => {
+      const heading = card.querySelector("h2")?.textContent?.trim() || `Bloco ${cardIndex + 1}`
+      const textNodes = Array.from(card.querySelectorAll(".editable-block p"))
+
+      return textNodes
+        .map((node, textIndex) => ({
+          id: `card-${cardIndex}-text-${textIndex}`,
+          title: textNodes.length > 1 ? `${heading} — Caixa ${textIndex + 1}` : heading,
+          text: node.textContent?.trim() || "",
+        }))
+        .filter((block) => block.text.length > 0)
+    })
   }
 
-  const applyEditableBlockHtml = (html: string, blockId: string, nextBlockHtml: string) => {
+  const applyEditableBlockHtml = (html: string, blockId: string, nextText: string) => {
     if (!html) return html
     const parsed = new DOMParser().parseFromString(html, "text/html")
-    const cards = Array.from(parsed.querySelectorAll(".card"))
-    const index = Number(blockId.replace("card-", ""))
-    const target = cards[index]
 
-    if (!target) {
+    const match = blockId.match(/^card-(\d+)-text-(\d+)$/)
+    if (!match) {
       return html
     }
 
-    target.innerHTML = nextBlockHtml
+    const cardIndex = Number(match[1])
+    const textIndex = Number(match[2])
+    const cards = Array.from(parsed.querySelectorAll(".card"))
+    const targetCard = cards[cardIndex]
+    if (!targetCard) {
+      return html
+    }
+
+    const editableTexts = Array.from(targetCard.querySelectorAll(".editable-block p"))
+    const targetText = editableTexts[textIndex]
+    if (!targetText) {
+      return html
+    }
+
+    targetText.textContent = nextText.trim()
     const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
     const serialized = parsed.documentElement.outerHTML
     return doctype ? `${doctype}\n${serialized}` : serialized
@@ -614,7 +628,7 @@ export default function AdminHomePage() {
         return
       }
 
-      const updatedHtml = applyEditableBlockHtml(previewHtml, blockId, block.html)
+      const updatedHtml = applyEditableBlockHtml(previewHtml, blockId, block.text)
 
       const { data, error } = await adminClient
         .from("documents")
@@ -944,7 +958,7 @@ export default function AdminHomePage() {
 
                   <div className="rounded-lg border p-3 space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <Label className="text-sm">Blocos editáveis do relatório (HTML)</Label>
+                      <Label className="text-sm">Caixas de texto editáveis do relatório</Label>
                     </div>
 
                     {editableBlocks.length === 0 ? (
@@ -980,16 +994,16 @@ export default function AdminHomePage() {
                               </Button>
                             </div>
                             <Textarea
-                              value={block.html}
+                              value={block.text}
                               onChange={(event) =>
                                 setEditableBlocks((prev) =>
                                   prev.map((item) =>
-                                    item.id === block.id ? { ...item, html: event.target.value } : item,
+                                    item.id === block.id ? { ...item, text: event.target.value } : item,
                                   ),
                                 )
                               }
-                              className="min-h-[180px] font-mono text-xs"
-                              placeholder="Edite o HTML deste bloco..."
+                              className="min-h-[140px] text-sm"
+                              placeholder="Edite o texto desta caixa..."
                               disabled={!previewHtml}
                             />
                           </div>
