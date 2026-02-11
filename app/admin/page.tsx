@@ -52,6 +52,12 @@ interface Patient {
   documents?: PatientDocument[]
 }
 
+interface EditableHtmlBlock {
+  id: string
+  title: string
+  html: string
+}
+
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -69,6 +75,8 @@ export default function AdminHomePage() {
   const [previewError, setPreviewError] = useState("")
   const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
+  const [editableBlocks, setEditableBlocks] = useState<EditableHtmlBlock[]>([])
+  const [savingBlockId, setSavingBlockId] = useState<string | null>(null)
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const remoteSearchRef = useRef("")
@@ -116,6 +124,40 @@ export default function AdminHomePage() {
     summaryParagraph.textContent = summary.trim()
     const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
     const serialized = document.documentElement.outerHTML
+    return doctype ? `${doctype}\n${serialized}` : serialized
+  }
+
+  const extractEditableBlocks = (html: string) => {
+    if (!html) return [] as EditableHtmlBlock[]
+    const parsed = new DOMParser().parseFromString(html, "text/html")
+    const cards = Array.from(parsed.querySelectorAll(".card"))
+
+    return cards
+      .map((card, index) => {
+        const heading = card.querySelector("h2")?.textContent?.trim() || `Bloco ${index + 1}`
+        return {
+          id: `card-${index}`,
+          title: heading,
+          html: card.innerHTML,
+        }
+      })
+      .filter((block) => block.html.trim().length > 0)
+  }
+
+  const applyEditableBlockHtml = (html: string, blockId: string, nextBlockHtml: string) => {
+    if (!html) return html
+    const parsed = new DOMParser().parseFromString(html, "text/html")
+    const cards = Array.from(parsed.querySelectorAll(".card"))
+    const index = Number(blockId.replace("card-", ""))
+    const target = cards[index]
+
+    if (!target) {
+      return html
+    }
+
+    target.innerHTML = nextBlockHtml
+    const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
+    const serialized = parsed.documentElement.outerHTML
     return doctype ? `${doctype}\n${serialized}` : serialized
   }
 
@@ -430,6 +472,14 @@ export default function AdminHomePage() {
   }, [previewHtml])
 
   useEffect(() => {
+    if (!previewHtml) {
+      setEditableBlocks([])
+      return
+    }
+    setEditableBlocks(extractEditableBlocks(previewHtml))
+  }, [previewHtml])
+
+  useEffect(() => {
     if (checkingAuth) return
     const trimmedSearch = search.trim()
     if (trimmedSearch) return
@@ -530,6 +580,63 @@ export default function AdminHomePage() {
       setMedicalSummaryError(err.message || "Erro ao atualizar resumo médico")
     } finally {
       setSavingMedicalSummary(false)
+    }
+  }
+
+  const handleSaveHtmlBlock = async (blockId: string) => {
+    if (!previewPatient || !previewHtml || !previewDocumentId || !isValidUuid(previewDocumentId)) {
+      setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
+      return
+    }
+
+    const block = editableBlocks.find((item) => item.id === blockId)
+    if (!block) return
+
+    setSavingBlockId(blockId)
+    setMedicalSummaryError("")
+    setError("")
+    setSuccessMessage("")
+
+    try {
+      const { data: document, error: documentError } = await adminClient
+        .from("documents")
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .eq("id", previewDocumentId)
+        .eq("patient_id", previewPatient.id)
+        .maybeSingle()
+
+      if (documentError) {
+        throw documentError
+      }
+
+      if (!document?.id || !isValidUuid(document.id)) {
+        setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
+        return
+      }
+
+      const updatedHtml = applyEditableBlockHtml(previewHtml, blockId, block.html)
+
+      const { data, error } = await adminClient
+        .from("documents")
+        .update({
+          html: updatedHtml,
+          file_name: document.file_name,
+          clean_text: document.clean_text,
+        })
+        .eq("id", document.id)
+        .select("id, patient_id, file_name, created_at, clean_text, pdf_url, html")
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      setPreviewHtml(data?.html ?? updatedHtml)
+      setSuccessMessage(`Bloco "${block.title}" atualizado com sucesso`)
+    } catch (err: any) {
+      setMedicalSummaryError(err.message || "Erro ao atualizar bloco do relatório")
+    } finally {
+      setSavingBlockId(null)
     }
   }
 
@@ -646,7 +753,6 @@ export default function AdminHomePage() {
                           className="text-left flex-1"
                           onClick={() => {
                             setSelectedPatientId(patient.id)
-                            setSelectedDocumentId(patient.documents?.[0]?.id ?? null)
                           }}
                         >
                           <p className="font-semibold text-slate-900">{patient.full_name}</p>
@@ -834,6 +940,62 @@ export default function AdminHomePage() {
                     <p className="text-xs text-muted-foreground">
                       Esta edição altera apenas o bloco “Resumo médico” no HTML armazenado.
                     </p>
+                  </div>
+
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-sm">Blocos editáveis do relatório (HTML)</Label>
+                    </div>
+
+                    {editableBlocks.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum bloco identificado no HTML para edição individual.
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                        {editableBlocks.map((block) => (
+                          <div key={block.id} className="rounded-md border p-3 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-slate-700">{block.title}</p>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => handleSaveHtmlBlock(block.id)}
+                                disabled={
+                                  savingBlockId === block.id ||
+                                  !previewHtml ||
+                                  !previewDocumentId ||
+                                  !isValidUuid(previewDocumentId)
+                                }
+                              >
+                                {savingBlockId === block.id ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
+                                  </>
+                                ) : (
+                                  <>
+                                    <PenSquare className="mr-2 h-4 w-4" /> Salvar bloco
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            <Textarea
+                              value={block.html}
+                              onChange={(event) =>
+                                setEditableBlocks((prev) =>
+                                  prev.map((item) =>
+                                    item.id === block.id ? { ...item, html: event.target.value } : item,
+                                  ),
+                                )
+                              }
+                              className="min-h-[180px] font-mono text-xs"
+                              placeholder="Edite o HTML deste bloco..."
+                              disabled={!previewHtml}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {medicalSummaryError && (
