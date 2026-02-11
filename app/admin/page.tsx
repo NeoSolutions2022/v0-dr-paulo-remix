@@ -52,12 +52,6 @@ interface Patient {
   documents?: PatientDocument[]
 }
 
-interface EditableHtmlBlock {
-  id: string
-  title: string
-  text: string
-}
-
 export default function AdminHomePage() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
@@ -75,12 +69,13 @@ export default function AdminHomePage() {
   const [previewError, setPreviewError] = useState("")
   const [previewDocumentId, setPreviewDocumentId] = useState<string | null>(null)
   const [previewMedicalSummary, setPreviewMedicalSummary] = useState("")
-  const [editableBlocks, setEditableBlocks] = useState<EditableHtmlBlock[]>([])
-  const [savingBlockId, setSavingBlockId] = useState<string | null>(null)
+  const [inlinePreviewEditing, setInlinePreviewEditing] = useState(false)
+  const [savingInlinePreview, setSavingInlinePreview] = useState(false)
   const [savingMedicalSummary, setSavingMedicalSummary] = useState(false)
   const [medicalSummaryError, setMedicalSummaryError] = useState("")
   const remoteSearchRef = useRef("")
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null)
   const adminClient = useMemo(() => createAdminBrowserClient(), [])
 
   const selectedPatient = useMemo(
@@ -127,52 +122,20 @@ export default function AdminHomePage() {
     return doctype ? `${doctype}\n${serialized}` : serialized
   }
 
-  const extractEditableBlocks = (html: string) => {
-    if (!html) return [] as EditableHtmlBlock[]
-    const parsed = new DOMParser().parseFromString(html, "text/html")
-    const cards = Array.from(parsed.querySelectorAll(".card"))
+  const applyInlinePreviewEditing = () => {
+    const iframe = previewIframeRef.current
+    const iframeDoc = iframe?.contentDocument
+    if (!iframeDoc) return
 
-    return cards.flatMap((card, cardIndex) => {
-      const heading = card.querySelector("h2")?.textContent?.trim() || `Bloco ${cardIndex + 1}`
-      const textNodes = Array.from(card.querySelectorAll(".editable-block p"))
-
-      return textNodes
-        .map((node, textIndex) => ({
-          id: `card-${cardIndex}-text-${textIndex}`,
-          title: textNodes.length > 1 ? `${heading} — Caixa ${textIndex + 1}` : heading,
-          text: node.textContent?.trim() || "",
-        }))
-        .filter((block) => block.text.length > 0)
+    const editableTexts = Array.from(iframeDoc.querySelectorAll(".editable-block p"))
+    editableTexts.forEach((node) => {
+      const paragraph = node as HTMLParagraphElement
+      paragraph.contentEditable = inlinePreviewEditing ? "true" : "false"
+      paragraph.style.outline = inlinePreviewEditing ? "1px dashed #60a5fa" : "none"
+      paragraph.style.borderRadius = inlinePreviewEditing ? "6px" : "0"
+      paragraph.style.padding = inlinePreviewEditing ? "4px" : "0"
+      paragraph.style.cursor = inlinePreviewEditing ? "text" : "default"
     })
-  }
-
-  const applyEditableBlockHtml = (html: string, blockId: string, nextText: string) => {
-    if (!html) return html
-    const parsed = new DOMParser().parseFromString(html, "text/html")
-
-    const match = blockId.match(/^card-(\d+)-text-(\d+)$/)
-    if (!match) {
-      return html
-    }
-
-    const cardIndex = Number(match[1])
-    const textIndex = Number(match[2])
-    const cards = Array.from(parsed.querySelectorAll(".card"))
-    const targetCard = cards[cardIndex]
-    if (!targetCard) {
-      return html
-    }
-
-    const editableTexts = Array.from(targetCard.querySelectorAll(".editable-block p"))
-    const targetText = editableTexts[textIndex]
-    if (!targetText) {
-      return html
-    }
-
-    targetText.textContent = nextText.trim()
-    const doctype = html.match(/<!doctype[^>]*>/i)?.[0]
-    const serialized = parsed.documentElement.outerHTML
-    return doctype ? `${doctype}\n${serialized}` : serialized
   }
 
   const isValidUuid = (value: string | null | undefined) =>
@@ -486,12 +449,10 @@ export default function AdminHomePage() {
   }, [previewHtml])
 
   useEffect(() => {
-    if (!previewHtml) {
-      setEditableBlocks([])
-      return
-    }
-    setEditableBlocks(extractEditableBlocks(previewHtml))
-  }, [previewHtml])
+    if (!previewHtml) return
+    const timer = setTimeout(() => applyInlinePreviewEditing(), 50)
+    return () => clearTimeout(timer)
+  }, [previewHtml, inlinePreviewEditing])
 
   useEffect(() => {
     if (checkingAuth) return
@@ -597,16 +558,25 @@ export default function AdminHomePage() {
     }
   }
 
-  const handleSaveHtmlBlock = async (blockId: string) => {
+  const handleSaveInlinePreview = async () => {
     if (!previewPatient || !previewHtml || !previewDocumentId || !isValidUuid(previewDocumentId)) {
       setMedicalSummaryError("Nenhum relatório disponível para este paciente.")
       return
     }
 
-    const block = editableBlocks.find((item) => item.id === blockId)
-    if (!block) return
+    const iframeDoc = previewIframeRef.current?.contentDocument
+    if (!iframeDoc) {
+      setMedicalSummaryError("Não foi possível acessar a visualização para salvar.")
+      return
+    }
 
-    setSavingBlockId(blockId)
+    const hasEditableText = iframeDoc.querySelector(".editable-block p")
+    if (!hasEditableText) {
+      setMedicalSummaryError("Nenhuma caixa de texto editável encontrada neste relatório.")
+      return
+    }
+
+    setSavingInlinePreview(true)
     setMedicalSummaryError("")
     setError("")
     setSuccessMessage("")
@@ -628,7 +598,9 @@ export default function AdminHomePage() {
         return
       }
 
-      const updatedHtml = applyEditableBlockHtml(previewHtml, blockId, block.text)
+      const doctype = previewHtml.match(/<!doctype[^>]*>/i)?.[0]
+      const updatedBody = iframeDoc.documentElement.outerHTML
+      const updatedHtml = doctype ? `${doctype}\n${updatedBody}` : updatedBody
 
       const { data, error } = await adminClient
         .from("documents")
@@ -646,11 +618,11 @@ export default function AdminHomePage() {
       }
 
       setPreviewHtml(data?.html ?? updatedHtml)
-      setSuccessMessage(`Bloco "${block.title}" atualizado com sucesso`)
+      setSuccessMessage("Alterações da visualização salvas com sucesso")
     } catch (err: any) {
-      setMedicalSummaryError(err.message || "Erro ao atualizar bloco do relatório")
+      setMedicalSummaryError(err.message || "Erro ao salvar alterações da visualização")
     } finally {
-      setSavingBlockId(null)
+      setSavingInlinePreview(false)
     }
   }
 
@@ -956,62 +928,6 @@ export default function AdminHomePage() {
                     </p>
                   </div>
 
-                  <div className="rounded-lg border p-3 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label className="text-sm">Caixas de texto editáveis do relatório</Label>
-                    </div>
-
-                    {editableBlocks.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Nenhum bloco identificado no HTML para edição individual.
-                      </p>
-                    ) : (
-                      <div className="space-y-4">
-                        {editableBlocks.map((block) => (
-                          <div key={block.id} className="rounded-md border p-3 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-slate-700">{block.title}</p>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => handleSaveHtmlBlock(block.id)}
-                                disabled={
-                                  savingBlockId === block.id ||
-                                  !previewHtml ||
-                                  !previewDocumentId ||
-                                  !isValidUuid(previewDocumentId)
-                                }
-                              >
-                                {savingBlockId === block.id ? (
-                                  <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando
-                                  </>
-                                ) : (
-                                  <>
-                                    <PenSquare className="mr-2 h-4 w-4" /> Salvar bloco
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                            <Textarea
-                              value={block.text}
-                              onChange={(event) =>
-                                setEditableBlocks((prev) =>
-                                  prev.map((item) =>
-                                    item.id === block.id ? { ...item, text: event.target.value } : item,
-                                  ),
-                                )
-                              }
-                              className="min-h-[140px] text-sm"
-                              placeholder="Edite o texto desta caixa..."
-                              disabled={!previewHtml}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   {medicalSummaryError && (
                     <Alert variant="destructive">
                       <AlertDescription>{medicalSummaryError}</AlertDescription>
@@ -1038,14 +954,58 @@ export default function AdminHomePage() {
                   )}
 
                   {!previewLoading && previewHtml && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={inlinePreviewEditing ? "default" : "outline"}
+                          onClick={() => setInlinePreviewEditing((prev) => !prev)}
+                          disabled={!previewHtml}
+                        >
+                          <PenSquare className="mr-2 h-4 w-4" />
+                          {inlinePreviewEditing ? "Finalizar edição na prévia" : "Editar na própria prévia"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleSaveInlinePreview}
+                          disabled={
+                            savingInlinePreview ||
+                            !inlinePreviewEditing ||
+                            !previewHtml ||
+                            !previewDocumentId ||
+                            !isValidUuid(previewDocumentId)
+                          }
+                        >
+                          {savingInlinePreview ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando alterações
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="mr-2 h-4 w-4" /> Salvar alterações da prévia
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        No modo de edição, apenas as caixas de texto do relatório ficam editáveis diretamente na
+                        visualização.
+                      </p>
+
                     <div className="border rounded-lg overflow-hidden">
                       <iframe
                         title="Relatório médico HTML"
+                        ref={previewIframeRef}
+                        onLoad={applyInlinePreviewEditing}
                         className="w-full min-h-[640px]"
-                        sandbox=""
+                        sandbox="allow-same-origin"
                         referrerPolicy="no-referrer"
                         srcDoc={sanitizedPreviewHtml}
                       />
+                    </div>
                     </div>
                   )}
                 </div>
