@@ -33,7 +33,7 @@ export default function ConfiguracoesPage() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.replace("/auth/login")
+        router.replace("/login")
         return
       }
 

@@ -25,7 +25,7 @@ export default function FirstAccessPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/auth/login");
+        router.push("/login");
         return;
       }
       setUserId(user.id);
